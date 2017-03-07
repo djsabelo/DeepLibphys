@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from BiosignalsDeepLibphys.utils.functions.common import plot_confusion_matrix, make_cmap, get_color
+from DeepLibphys.utils.functions.common import plot_confusion_matrix, make_cmap, get_color
 
 def print_confusion(Mod, Sig, loss_tensor, signals_models, signals_tests):
     labels_model = np.asarray(np.zeros(len(Mod)*2, dtype=np.str), dtype=np.object)

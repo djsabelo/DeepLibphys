@@ -1,5 +1,5 @@
-from BiosignalsDeepLibphys.utils.functions.common import get_fantasia_dataset
-from BiosignalsDeepLibphys.utils.functions.libphys_GRU import LibPhys_GRU
+from DeepLibphys.utils.functions.common import get_fantasia_dataset
+from DeepLibphys.utils.functions.libphys_GRU import LibPhys_GRU
 
 SIGNAL_DIRECTORY = '../utils/data/trained/'
 

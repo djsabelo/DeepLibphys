@@ -1,11 +1,18 @@
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn
+
+import sys
+sys.path.append("/home/belo/PycharmProjects/BiosignalsLibphysGroup")
+print(sys.path)
 
 import DeepLibphys.models.libphys_MBGRU as GRU
 import DeepLibphys.utils.functions.database as db
-from DeepLibphys.utils.functions.common import get_signals_tests, get_random_batch, randomize_batch, plot_confusion_matrix
+from DeepLibphys.utils.functions.common import (get_random_batch,
+                                                get_signals_tests,
+                                                plot_confusion_matrix,
+                                                randomize_batch)
 from DeepLibphys.utils.functions.database import ModelInfo
-import matplotlib.pyplot as plt
-import seaborn
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 

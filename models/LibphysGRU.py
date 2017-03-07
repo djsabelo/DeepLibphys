@@ -167,12 +167,12 @@ class LibphysGRU:
         self.save(signal2model.signal_directory, self.get_file_tag(-5, -5))
 
     def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1):
-        self.train_block(X, signal2model, [0], signal2model.batch_size, overlap, random_training, start_index, loss_interval)
+        self.train_block([X], signal2model, [0], signal2model.batch_size, overlap, random_training, start_index, loss_interval)
 
     def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1):
         loss = [self.calculate_loss(x_train, y_train)]
         lower_error_threshold, higher_error_threshold = [0.00001, 1]
-        lower_error = 10**(-6)
+        lower_error = 10**(-4)
         lower_learning_rate = 0.000000001
         count_to_break = 0
         count_up_slope = 0
@@ -194,7 +194,8 @@ class LibphysGRU:
 
                     relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
                     if math.isnan(loss[-1]):
-                        break
+                        loss.pop()
+                        relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
                     if relative_loss_gradient < 0 and epoch > 10:
                         count_up_slope += 1
                         if count_up_slope >= 5:
@@ -225,6 +226,9 @@ class LibphysGRU:
                 if epoch % 10 == 0 and track_loss:
                     plt.clf()
                     plt.plot(loss[1:])
+                    plt.ylim([0, np.max(loss[-20:])])
+                    if epoch % 100 == 0:
+                        plt.ylim([0, np.max(loss)])
                     plt.pause(0.05)
 
                 t1 = time.time()

@@ -1,5 +1,5 @@
-import BiosignalsDeepLibphys.utils.functions.libphys_GRU as GRU
-from BiosignalsDeepLibphys.utils.functions.common import get_fantasia_dataset, get_signals
+import DeepLibphys.utils.functions.libphys_GRU as GRU
+from DeepLibphys.utils.functions.common import get_fantasia_dataset, get_signals
 import matplotlib.pyplot as plt
 import numpy as np
 #CONFUSION_TENSOR_[W,Z]

@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 
-import BiosignalsDeepLibphys.utils.data.database as db
-import BiosignalsDeepLibphys.utils.functions.libphys_RGRU as RGRU
-from BiosignalsDeepLibphys.utils.functions.common import get_signals_tests
-from BiosignalsDeepLibphys.utils.functions.signal2model import Signal2Model
+import DeepLibphys.utils.data.database as db
+import DeepLibphys.utils.functions.libphys_RGRU as RGRU
+from DeepLibphys.utils.functions.common import get_signals_tests
+from DeepLibphys.utils.functions.signal2model import Signal2Model
 
 # N = 5000
 # example_index = [7]

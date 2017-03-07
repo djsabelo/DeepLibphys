@@ -19,7 +19,7 @@ import DeepLibphys.models.libphys_GRU as GRU
 DATASET_DIRECTORY = '../data/datasets/'
 TRAINED_DATA_DIRECTORY = '../data/trained/'
 COLORMAP_DIRECTORY = '../data/biosig_colormap/'
-RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/BiosignalsDeepLibphys/Signals/'
+RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
 
 class ModelType:
     MINI_BATCH, SGD = range(2)
@@ -57,7 +57,8 @@ def acquire_and_process_signals(full_paths, signal_dim, decimate=None, peak_into
             if (decimate is not None and isinstance(decimate, int)) and not isinstance(decimate, bool):
                 signal = sig.decimate(signal, decimate)
 
-            signals.append(process_signal(signal, signal_dim, smooth_window, peak_into_data, decimate, regression=regression))  # insert signals into an array of signals
+            signals.append(process_signal(remove_noise(signal,smooth_window=smooth_window),
+                                          signal_dim, peak_into_data, decimate, regression=regression))  # insert signals into an array of signals
 
             if peak_into_data is not False:
                 start_index = np.random.random_integers(0, len(signal) - peak_into_data)
@@ -86,16 +87,18 @@ def acquire_and_process_signals(full_paths, signal_dim, decimate=None, peak_into
 
     return signals
 
+def remove_noise(signal, moving_avg_window=60, smooth_window=10):
+    signal = smooth(removeMovingAvg(signal, moving_avg_window), smooth_window) # smooth the signal
+    return signal
 
-def process_signal(signal, interval_size, smooth_window, peak_into_data, decimate, regression):
-    signal = smooth(signal, smooth_window)                  # smooth the signal
+def process_signal(signal, interval_size, peak_into_data, decimate, regression):
     if (decimate is not None and isinstance(decimate, int)) and not isinstance(decimate, bool):
         signal = signal[100000:400000]
 
-    if peak_into_data is not False:
-        start_index = np.random.random_integers(0, len(signal) - peak_into_data)
-        plt.plot(signal[start_index:start_index + peak_into_data]-np.mean(signal[start_index:start_index + peak_into_data]), color='#660033')
-        plt.show()
+    # if peak_into_data is not False:
+    #     start_index = np.random.random_integers(0, len(signal) - peak_into_data)
+    #     plt.plot(signal[start_index:start_index + peak_into_data]-np.mean(signal[start_index:start_index + peak_into_data]), color='#660033')
+    #     plt.show()
 
     if regression:
         signal -= np.mean(signal)
@@ -114,7 +117,7 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
         signal = sig.decimate(signal, decimate)
 
     signal = smooth(signal, smooth_window, window=smooth_type)
-    signal = removeAvg(signal, window)
+    signal = removeMovingAvg(signal, window)
     if peak_into_data is not False:
         start_index = np.random.random_integers(0, len(signal) - peak_into_data)
         plt.plot(signal[start_index:start_index + peak_into_data]-np.mean(signal[start_index:start_index + peak_into_data]), color='#660033')
@@ -126,16 +129,53 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
     signal *= (interval_size - 1)                           # with "interval_size" steps (min = 0, max = interval_size-1))
     return signal.astype(int)                               # insert signal into an array of signals
 
-def removeAvg(signal, window_size):
-    for i in signal:
-        n = [int(window_size/2 - i), int(window_size/2 + i)]
-        if n[0] < 0:
-            n[0] = 0
+def removeMovingAvg(signal, window_size=500, i=1):
+    window_size = 60
+
+
+    # print(bins)
+    # print(patches)
+    plt.figure(i)
+
+    plt.plot(signal)
+
+    signalx = np.zeros_like(signal)
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        # if n[0] < 0:
+        #     n[0] = 0
         if n[1] > len(signal):
             n[1] = len(signal) -1
 
-        signal[n[0]:n[1]] = signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]])
+        if len(signal[n[0]:n[1]]) > 0:
+            signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]]))
 
+    signal = signalx
+    signalx = np.zeros_like(signal)
+    window_size = 1000
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        # if n[0] < 0:
+        #     n[0] = 0
+        if n[1] > len(signal):
+            n[1] = len(signal) -1
+
+        if len(signal[n[0]:n[1]]) > 0:
+            signalx[n[0]:n[1]] = signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]])
+    plt.figure(2)
+    n, bins, patches = plt.hist(signalx, 1000)
+    # print(n)
+    plt.figure(i)
+    cum = np.cumsum(n)
+    # plt.plot(bins)
+    # plt.plot(np.where(cum <= 0.05*np.sum(n))[0], bins[cum <= 0.05*np.sum(n)])
+    # plt.plot(np.where(cum >= 0.95*np.sum(n))[0], bins[cum >= 0.95*np.sum(n)])
+    plt.ylim([bins[np.where(cum <= 0.001*np.sum(n))[0][-1]], bins[np.where(cum >= 0.999*np.sum(n))[0][0]]])
+
+    plt.plot(signalx)
+    # plt.show()
     return signal
 
 
@@ -147,6 +187,20 @@ def removeAvg(signal, window_size):
 
 
 def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir, peak_into_data, regression, smooth_window=10):
+    full_paths = get_fantasia_full_paths(dataset_dir, example_index_array)
+    signals = acquire_and_process_signals(full_paths, signal_dim, peak_into_data=peak_into_data, smooth_window=smooth_window, regression=regression)
+
+    if len(signals) > 50:
+        signals = [signals]
+
+    y_train = np.zeros(len(signals)).tolist()
+    print("Signal acquired")
+    for i in range(len(signals)):
+        y_train[i] = signals[i][1:] + [0]
+
+    return signals, y_train
+
+def get_fantasia_full_paths(dataset_dir, example_index_array):
     full_paths = np.zeros(len(example_index_array)).tolist()
     example_index_array = np.asarray(example_index_array)
     i = 0
@@ -159,22 +213,12 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir, peak_into
         elif example <= 19:
             file_name = 'f1y0' + str(example-10) + 'm.mat'
         elif example == 20:
-            file_name = 'f1y10m.mat'
+            file_name = 'f2y10m.mat'
 
         full_paths[i] = RAW_SIGNAL_DIRECTORY + dataset_dir + file_name
         i += 1
 
-    signals = acquire_and_process_signals(full_paths, signal_dim, peak_into_data=peak_into_data, smooth_window=smooth_window, regression=regression)
-
-    if len(signals) > 50:
-        signals = [signals]
-
-    y_train = np.zeros(len(signals)).tolist()
-    print("Signal acquired")
-    for i in range(len(signals)):
-        y_train[i] = signals[i][1:] + [0]
-
-    return signals, y_train
+    return full_paths
 
 def get_fantasia_noisy_data(signal_dim, example_index_array, noisy_index, dataset_dir, peak_into_data, regression, smooth_window=10):
     full_paths = np.zeros(len(example_index_array)).tolist()
@@ -209,9 +253,15 @@ def get_day_dataset(signal_dim, dataset_dir, file_name='ah_r-r', peak_into_data=
     npzfile = np.load(RAW_SIGNAL_DIRECTORY + dataset_dir + file_name + '.npz', encoding='latin1')
     loaded_signals = npzfile[val]
 
-    loaded_signals = [[process_signal(signal, signal_dim, smooth_window, peak_into_data, False, regression=regression)
+    loaded_signals = [[process_signal(signal, signal_dim, peak_into_data, False, regression=regression)
                      for signal in signal_group]
                      for signal_group in loaded_signals]
+
+    for signal in loaded_signals[0]:
+        if peak_into_data is not False:
+            start_index = np.random.random_integers(0, len(signal) - peak_into_data)
+            plt.plot(signal[start_index:start_index + peak_into_data])
+            plt.show()
 
     print("Signals acquired")
     return loaded_signals
@@ -753,8 +803,14 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     # plt.tight_layout()
     if len(labels_pred) == 2:
         labels_pred = ["", labels_pred[0], "", labels_pred[1]]
+    else:
+        labels_pred = np.array([["", label] for label in labels_pred])
+        labels_pred = labels_pred.flatten()
     if len(labels_true) == 2:
         labels_true = ["", labels_true[0], "", labels_true[1]]
+    else:
+        labels_true = np.array([["", label] for label in labels_true])
+        labels_true = labels_true.flatten()
 
     if norm:
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap, vmin=0, vmax=1)
@@ -887,7 +943,7 @@ def segment_signal(signal, W, overlap=0.5, N_Windows=None, start_index=0):
     :return:
         matrix with all windows of the segmented signal ([number of windows] X [window_size])
     """
-    signal = signal
+
     step = int(W*overlap)
     if overlap == 0:
         step = 1
@@ -936,7 +992,7 @@ def segment_matrix(signal, W, overlap=0.5, N_Windows=None, start_index=0):
     N_dimension = len(np.shape(signal))
     N = np.shape(signal)[N_dimension-1] - 1  # Number of samples in the end of processing
     if N_dimension == 1:
-        signal = np.reshape(signal, (N_dimension, N))
+        signal = np.reshape(signal, (N_dimension, N+1))
 
     end_indexes = list(range(start_index+W, N, step))
     if N_Windows is None:
@@ -1062,8 +1118,8 @@ def get_signals_tests(signals_tests, Sd=64, index=None, regression=False, type=N
         history.append(signal_info.type)
 
         N = len(X_train)
-        if X_train.__class__ is list:
-            N = len(X_train[i])
+        # if X_train.__class__ is list:
+        #     N = len(X_train[i])
 
         signals[0][s] = np.asarray(X_train[i])
         signals[1][s] = np.asarray(Y_train[i])

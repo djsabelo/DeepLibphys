@@ -1,6 +1,6 @@
-import BiosignalsDeepLibphys.utils.functions.libphys_GRU as GRU
-from BiosignalsDeepLibphys.utils.functions.common import get_fantasia_dataset
-from BiosignalsDeepLibphys.utils.functions.signal2model import Signal2Model
+import DeepLibphys.utils.functions.libphys_GRU as GRU
+from DeepLibphys.utils.functions.common import get_fantasia_dataset
+from DeepLibphys.utils.functions.signal2model import Signal2Model
 import theano
 
 fantasia_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

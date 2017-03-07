@@ -43,20 +43,20 @@ class LibphysMBGRU(LibphysGRU):
         coversion_ones = T.ones((self.mini_batch_size, 1))
 
 
-        def GRU(i, U, W, b, x_0, s_previous):
-            b1 = T.specify_shape((coversion_ones * b[i * 3, :]).T, T.shape(x_0))
-            b2 = T.specify_shape((coversion_ones * b[i * 3 + 1, :]).T, T.shape(x_0))
-            b3 = T.specify_shape((coversion_ones * b[i * 3 + 2, :]).T, T.shape(x_0))
-
-            z = T.nnet.hard_sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b1)
-            r = T.nnet.hard_sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b2)
-            s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b3)
-
-            return (T.ones_like(z) - z) * s_candidate + z * s_previous
-
         def forward_prop_step(x_t, s_prev1, s_prev2, s_prev3):
             # Embedding layer
             x_e = E[:, x_t]
+
+            def GRU(i, U, W, b, x_0, s_previous):
+                b1 = T.specify_shape((coversion_ones * b[i * 3, :]).T, T.shape(x_0))
+                b2 = T.specify_shape((coversion_ones * b[i * 3 + 1, :]).T, T.shape(x_0))
+                b3 = T.specify_shape((coversion_ones * b[i * 3 + 2, :]).T, T.shape(x_0))
+
+                z = T.nnet.hard_sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b1)
+                r = T.nnet.hard_sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b2)
+                s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b3)
+
+                return (T.ones_like(z) - z) * s_candidate + z * s_previous
 
             # GRU Layer 1
             s1 = GRU(0, U, W, b, x_e, s_prev1)
@@ -114,6 +114,7 @@ class LibphysMBGRU(LibphysGRU):
     def calculate_error(self, O, Y):
         return T.sum(self.calculate_ce_vector(O, Y))
 
+
     def calculate_ce_vector(self, O, Y):
         return [T.sum(T.nnet.categorical_crossentropy(O[:, :, i], Y[i, :])) for i in range(self.mini_batch_size)]
 
@@ -121,10 +122,10 @@ class LibphysMBGRU(LibphysGRU):
         return np.sum([self.ce_error(X[i:i + self.mini_batch_size, :], Y[i:i + self.mini_batch_size, :])
                        for i in range(0, np.shape(X)[0], self.mini_batch_size)])
 
-    def calculate_loss(self, X, Y):
-        num_words = np.shape(X)[0] * np.shape(X)[1]
-        return self.calculate_total_loss(X, Y) / float(num_words)
 
+    def calculate_loss(self, X, Y):
+        num_words = float(np.shape(X)[0] * np.shape(X)[1])
+        return self.calculate_total_loss(X, Y) / num_words
 
     def generate_predicted_signal(self, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
         signal2model = Signal2Model(self.model_name, self.get_directory_tag(), signal_dim=self.signal_dim,

@@ -10,7 +10,7 @@ from six import StringIO
 import os
 import math
 from theano import printing
-# from BioSignalsDeepLibphys.utils.functions.common import make_training_sets
+# from DeepLibphys.utils.functions.common import make_training_sets
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 

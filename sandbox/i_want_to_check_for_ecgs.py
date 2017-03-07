@@ -1,6 +1,6 @@
 import numpy as np
 
-from BiosignalsDeepLibphys.utils.functions.common import plot_confusion_matrix
+from DeepLibphys.utils.functions.common import plot_confusion_matrix
 
 
 def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_tests, no_numbers=False):

@@ -1,9 +1,9 @@
 import numpy as np
 import theano
 import theano.tensor as T
-import BiosignalsDeepLibphys.utils.functions.libphys_GRU_DEV as GRU
-import BiosignalsDeepLibphys.utils.data.database as db
-from BiosignalsDeepLibphys.utils.functions.common import get_signals_tests, segment_signal
+import DeepLibphys.utils.functions.libphys_GRU_DEV as GRU
+import DeepLibphys.utils.data.database as db
+from DeepLibphys.utils.functions.common import get_signals_tests, segment_signal
 from matplotlib import pyplot as plt
 import seaborn
 

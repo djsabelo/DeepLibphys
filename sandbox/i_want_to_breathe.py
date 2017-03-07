@@ -1,6 +1,6 @@
-import BiosignalsDeepLibphys.utils.functions.libphys_GRU as GRU
-from BiosignalsDeepLibphys.utils.functions.common import get_fantasia_dataset
-from BiosignalsDeepLibphys.utils.functions.signal2model import Signal2Model
+import DeepLibphys.utils.functions.libphys_GRU as GRU
+from DeepLibphys.utils.functions.common import get_fantasia_dataset
+from DeepLibphys.utils.functions.signal2model import Signal2Model
 
 fantasia_list = [2, 3, 4 ,5, 6, 7, 8, 9, 10]
 signals = [Signal2Model("resp_"+str(i), "RESP_FANTASIA[128.256]", save_interval=1000, number_of_batches=1, batch_size=256) for i in fantasia_list]

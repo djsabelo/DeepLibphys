@@ -9,7 +9,7 @@ import theano as theano
 import theano.tensor as T
 from theano import printing
 
-from BiosignalsDeepLibphys.utils.functions.common import segment_signal
+from DeepLibphys.utils.functions.common import segment_signal
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 

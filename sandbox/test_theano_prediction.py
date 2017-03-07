@@ -1,5 +1,5 @@
-import BiosignalsDeepLibphys.utils.functions.libphys_GRU_DEV as GRU
-from BiosignalsDeepLibphys.utils.functions.common import get_fantasia_dataset, get_signals, segment_signal
+import DeepLibphys.utils.functions.libphys_GRU_DEV as GRU
+from DeepLibphys.utils.functions.common import get_fantasia_dataset, get_signals, segment_signal
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib

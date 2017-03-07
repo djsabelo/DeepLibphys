@@ -191,6 +191,11 @@ ecg_biometry_models = [ModelInfo(Hd=256, dataset_name="bio_ecg_"+str(i),
                         directory="BIOMETRIC_ECGs_[128.256]")
               for i in range(19)]
 
+ecg_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg_"+str(i+1),
+                        name="ECG "+str(i-1),
+                        directory="CLEAN_ECGs_[256.256]")
+              for i in range(1,13)]
+
 ecg_noisy_biometry_models = [ModelInfo(Hd=256, dataset_name="biometry_with_noise_"+str(i),
                         name="ECG "+str(i+1),
                         directory="BIOMETRIC_ECGs_[20.256]")
@@ -228,6 +233,16 @@ gsr_models = [ModelInfo(dataset_name="driver_gsr"+str(i),
 rr_models = [ModelInfo(dataset_name='day_rr_10Hz_{0}'.format(i+1),
                         name="RR "+str(i+1),
                         directory="DAY_RR_[128.64]")
+              for i in range(4)]
+
+rr_256_models = [ModelInfo(dataset_name='day_rr_10Hz_{0}'.format(i+1),
+                        name="RR "+str(i+1),
+                        directory="DAY_RR_[128.256]")
+              for i in range(4)]
+
+rr_128_models = [ModelInfo(Hd=128, dataset_name='day_rr_10Hz_[20]{0}'.format(i+1),
+                        name="RR "+str(i+1),
+                        directory="DAY_RR_[128.256]")
               for i in range(4)]
 
 lf_models = [ModelInfo(dataset_name='day_lf_10Hz_{0}'.format(i+1),
@@ -306,11 +321,31 @@ signal_tests = [SignalInfo("emg", 'EMG Cycling', 0, 300000, "EMG BIKE"),
                 SignalInfo("eeg", 'EEG_Attention', 5, 429348, "EEG ATT 5"),
                 ] + [SignalInfo("biometric", 'Biometry', i, 90000, "BIO "+str(i)) for i in range(300)]
 
+fantasia_ecgs = [SignalInfo("ecg", 'Fantasia/ECG/mat/', 1, 900000, "ECG 1"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 2, 900000, "ECG 2"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 3, 900000, "ECG 3"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 4, 900000, "ECG 4"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 5, 900000, "ECG 5"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 6, 900000, "ECG 6"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 7, 900000, "ECG 7"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 8, 900000, "ECG 8"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 9, 900000, "ECG 9"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 10, 900000, "ECG 10"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 11, 900000, "ECG 11"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 12, 900000, "ECG 12"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 13, 900000, "ECG 13"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 14, 900000, "ECG 14"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 15, 900000, "ECG 15"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 16, 900000, "ECG 16"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 17, 900000, "ECG 17"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 18, 900000, "ECG 18"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 19, 900000, "ECG 19"),
+                SignalInfo("ecg", 'Fantasia/ECG/mat/', 20, 900000, "ECG 20")]
 
 ecg_noisy_signals = [[SignalInfo("ecg noise", 'Fantasia/Noise_ECG/', i, 900000, "ECG-NOISE-"+str(j)+"-"+str(i))
                       for i in range(1,20)] for j in range(4)]
 
 day_rr = [SignalInfo("day", 'Day_HRV/RR/', 0, -1, "RR", 'ah_r-r_10Hz')]
-day_hf = [SignalInfo("day hrv", 'Day_HRV/HRV/', 0, -1, "RR", 'hf')]
+day_hf = [SignalInfo("day hrv", 'Day_HRV/HRV/', 0, -1, "RR", 'hf_10Hz')]
 day_lf = [SignalInfo("day hrv", 'Day_HRV/HRV/', 0, -1, "RR", 'lf_10Hz')]
 day_vlf = [SignalInfo("day hrv", 'Day_HRV/HRV/', 0, -1, "RR", 'vlf_10Hz')]

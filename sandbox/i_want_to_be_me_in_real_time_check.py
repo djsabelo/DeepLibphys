@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from BiosignalsDeepLibphys.utils.functions.common import plot_confusion_matrix, make_cmap, get_color, plot_confusion_matrix_with_pie
+from DeepLibphys.utils.functions.common import plot_confusion_matrix, make_cmap, get_color, plot_confusion_matrix_with_pie
 import seaborn
 
 def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_tests, no_numbers=False):
