@@ -102,7 +102,6 @@ def calculate_loss_tensor(filename, Total_Windows, W, signals_models, noisy_inde
     print("Loading model...")
     model_info = signals_models[0]
 
-
     model = GRU.LibPhys_GRU(model_info.Sd, hidden_dim=model_info.Hd, signal_name=model_info.dataset_name,
                             n_windows=n_windows)
 
@@ -325,9 +324,9 @@ def get_classification_confusion(signal_predicted_tensor):
     return confusion_tensor
 
 
-def print_confusion(sinal_predicted_matrix, labels_signals, labels_model, no_numbers=False):
+def print_confusion(sinal_predicted_matrix, labels_signals, labels_model, no_numbers=False,norm=True):
     print(sinal_predicted_matrix)
-    plot_confusion_matrix(sinal_predicted_matrix, labels_signals, labels_model, no_numbers, norm=True)
+    plot_confusion_matrix(sinal_predicted_matrix, labels_signals, labels_model, no_numbers, norm=norm)
     # cmap = make_cmap(get_color(), max_colors=1000)
 
 
@@ -587,6 +586,9 @@ def get_min_max(j, interval, roc):
     elif min_max[1] >= len(roc[0, :, j]):
         min_max[0] -= (len(roc[0, :, j])+1+interval)
         min_max[1] = len(roc[0, :, j])-1
+        if min_max[0] < 0:
+            min_max[1] = interval
+            min_max[0] = 0
 
     return min_max
 
@@ -607,8 +609,8 @@ def find_eeq(roc, j):
     fnr_y = roc[0, array_indexes, j]
     fpr_x = roc[1, array_indexes, j]
 
-    x_interpolation = interpolate.splrep(array_indexes, fpr_x, s=0)
-    y_interpolation = interpolate.splrep(array_indexes, fnr_y, s=0)
+    x_interpolation = interpolate.interp1d(array_indexes, fpr_x)
+    y_interpolation = interpolate.interp1d(array_indexes, fnr_y)
 
     candidate = np.array([1])
     candidate_index = np.argmin(candidate)
@@ -620,17 +622,15 @@ def find_eeq(roc, j):
         patience += 1
         new_array_indexes = np.linspace(array_indexes[0], array_indexes[-1], num=array_size)
         try:
-            new_fpr_x = interpolate.splev(new_array_indexes, x_interpolation, der=0)
-            new_fnr_y = interpolate.splev(new_array_indexes, y_interpolation, der=0)
+            new_fpr_x = x_interpolation(new_array_indexes)
+            new_fnr_y = y_interpolation(new_array_indexes)
 
             # print(new_fnr_y)
             candidate = abs(new_fpr_x - new_fnr_y)
             candidate_index = np.argmin(candidate)
             # print(new_fnr_y[candidate_index], end="..")
             # if len(new_array_indexes) != len(array_indexes):
-            # plt.plot(new_fpr_x, new_fnr_y, new_fpr_x[candidate_index], new_fnr_y[candidate_index], 'ro')
-            # plt.scatter(fpr_x, fnr_y, marker='.')
-            # plt.show()
+
             array_size *= 2
         except:
             plt.plot(new_fpr_x, new_fnr_y, new_fpr_x[candidate_index], new_fnr_y[candidate_index], 'ro')
@@ -638,6 +638,9 @@ def find_eeq(roc, j):
             plt.show()
             break
 
+    # plt.plot(new_fpr_x, new_fnr_y, new_fpr_x[candidate_index], new_fnr_y[candidate_index], 'ro')
+    # plt.scatter(fpr_x, fnr_y, marker='.')
+    # plt.show()
     eer = new_fnr_y[candidate_index]
     if patience == PATIENCE_MAX:
         print("Patience is exausted when searching for eer, minimum found: "+str(candidate[candidate_index]))
@@ -660,7 +663,7 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10):
             if len(np.shape(temp_loss_tensor)) == 1 and temp_loss_tensor == -1:
                 break;
 
-            roc1, roc2, scores, eer_min = calculate_roc(temp_loss_tensor, step=0.01)
+            roc1, roc2, scores, eer_min = calculate_roc(temp_loss_tensor, step=0.001)
             # plot_roc(roc1, roc2, eer_min)
             print("EER MIN: {0}".format(eer_min[0]))
             eers[0].append(eer_min[0, :])
@@ -757,24 +760,29 @@ def calculate_mean_windows_loss(loss_tensor, batch_size):
 
     return temp_loss_tensor
 
+
+def calculate_mean_error(loss_tensor):
+    loss_tensor = loss_tensor / np.sum(loss_tensor, axis=1)
+    return np.mean(loss_tensor, axis=2)
+
 # CONFUSION_TENSOR_[W,Z]
 # N_Windows = 6000
 W = 256
 N_Windows = 6000
-noisy_index = 4
+
 
 print("Processing Biometric ECG - with #windows of "+str(N_Windows))
-signals_models = db.ecg_biometry_models
-# indexes = np.random.permutation(len(signals_models))
-signals_models = np.array(signals_models)#[indexes]
+signals_models = db.ecg_clean_models
+signals_models = np.array(signals_models)
 
 # for noisy_index in range(1,5):
-print("Processing Biometric ECG: " + str(noisy_index))
-filename = '../data/validation/CLEAN_'
-# filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(noisy_index, 1)
-# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models)
+print("Processing Biometric CLEAN ECG_FULL")
+filename = '../data/validation/CLEAN_ECG_FULL'
 
-filename = '../data/validation/NOISY_INDEX_[{0}.{1}]'.format("8.0", 0)
+# filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(noisy_index, 1)
+loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models)
+
+# filename = "../data/validation/CLEAN_"
 # filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(1, 1)
 npzfile = np.load(filename + ".npz")
 loss_tensor, signals_models_, signals_models  = \
@@ -783,12 +791,27 @@ loss_tensor, signals_models_, signals_models  = \
 labels_s = [model_info.name for model_info in signals_models_]
 labels_m = [model_info.name for model_info in signals_models]
 
+# random_indexes = np.random.permutation(np.shape(loss_tensor)[0])
+# random_indexes_ = np.random.permutation(np.shape(loss_tensor)[1])
+# loss_tensor_ = loss_tensor
+# loss_tensor = np.zeros_like(loss_tensor)
+# for i in range(np.shape(loss_tensor_)[0]):
+#     for j in range(np.shape(loss_tensor)[1]):
+#         loss_tensor[i, j, :] = loss_tensor_[random_indexes[i], random_indexes_[j], :]
+
+# labels_m = np.array(labels_m)[random_indexes]
+# labels_s = np.array(labels_s)[random_indexes_]
+# labels_m = np.array(labels_m)
+# labels_s = np.array(labels_s)
 # for i in range(5,10):
-# classified_matrix = calculate_classification_matrix(loss_tensor)#calculate_min_windows_loss(loss_tensor,i))
-# print_confusion(classified_matrix, labels_s, labels_m)
+classified_matrix = calculate_classification_matrix(loss_tensor)#calculate_min_windows_loss(loss_tensor,i))
+
+# error_matrix = calculate_mean_error(loss_tensor)
+# print_confusion(classified_matrix.T, labels_s, labels_m)
+# print_confusion(error_matrix, labels_s, labels_m, norm=False)
 # process_EER(loss_tensor, N_Windows, W)
 
-process_EER(loss_tensor[:,:-1,:], N_Windows, W)
+process_EER(loss_tensor, N_Windows, W)
 
 
 

@@ -2,7 +2,7 @@ import numpy as np
 
 import DeepLibphys.models.libphys_MBGRU as GRU
 import DeepLibphys.utils.functions.database as db
-from DeepLibphys.utils.functions.common import get_signals_tests, removeMovingAvg, randomize_batch, plot_confusion_matrix, segment_signal, get_fantasia_full_paths, process_signal, remove_noise
+from DeepLibphys.utils.functions.common import *
 from DeepLibphys.utils.functions.database import ModelInfo
 from scipy import interpolate, signal as sc
 import novainstrumentation
@@ -768,59 +768,57 @@ smoothed_signals = []
 signals_with_added_noise = [[] for i in range(21)]
 SNRs = [[] for i in range(21)]
 full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,21)))
-MIN_NOISE_DB = 12
-noise_DB_array = np.array(range(MIN_NOISE_DB, 6, -1))
+MIN_NOISE_DB = 10
+noise_DB_array = np.array(range(MIN_NOISE_DB, 4, -1))
 
 N_SIGNALS, N_NOISE, N_SAMPLES = len(full_paths), len(noise_DB_array)+1, 0
 for i, file_path in zip(range(len(full_paths)),full_paths):
 
     signal = sio.loadmat(file_path)['val'][0]
-    signal = removeMovingAvg((signal - np.mean(signal))/(np.std(signal)), 250, i)
 
-    # raw_signals.append(signal)
-    # smoothed_signals.append(novainstrumentation.smooth(signal, window_len=10))
-    # SMOOTH_AMPLITUDE =  np.max(smoothed_signals[-1]) - np.min(smoothed_signals[-1])
-    # # sc.pea
-    # signals_with_added_noise[i].append(np.array(signal))
-    # N_SAMPLES = len(signal)
-    #
-    # noise = smoothed_signals[-1] - signal
-    # NOISE_AMPLITUDE = np.mean(np.abs(noise)) * 2
-    # SNR = 10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE)
-    # SNRs[i].append(int(SNR * 10) / 10)
-    # last_std = 0.0001
+    signal = (signal - np.mean(signal)) / np.std(signal)
+    signal = remove_moving_avg(signal)
+    signal = remove_moving_std(signal)
+    raw_signals.append(signal)
+    signal = smooth(signal)
+    smoothed_signals.append(signal)
 
-    # for noise_DB in noise_DB_array:
-    #     # print(SNRs[i][0])
-    #     if noise_DB > SNRs[i][0]:
-    #         signals_with_added_noise[i].append([])
-    #         print("ABORTED")
-    #     else:
-    #         print("start ", noise_DB)
-    #         SNR = 0
-    #         while int(SNR*10) != noise_DB*10:
-    #             added_noise = np.random.normal(0, last_std, len(signal))
-    #             signal_with_noise = np.array(signal) + added_noise
-    #             signal_with_noise -= np.mean(signal_with_noise)
-    #             noise = smoothed_signals[-1] - signal_with_noise
-    #             NOISE_AMPLITUDE = np.mean(np.abs(noise)) * 2
-    #             SNR = 10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE)
-    #             # print(int(SNR*10), " - ", noise_DB*10)
-    #             if int(SNR*10) > noise_DB*10:
-    #                 last_std *= 2
-    #             else:
-    #                 last_std *= 0.2
-    #
-    #         SNRs[i].append(int(SNR * 10) / 10)
-    #         signals_with_added_noise[i].append(np.array(signal_with_noise))
-    # SNRs[i].append(np.mean(np.array(SNRs[i])))
 
-            # print("NOISE - ",SNR,"dB")
-            # plt.plot(signals_with_added_noise[i][-1][:1000], 'r')  # , signals_noise[-1][:1000], 'b')
-            # plt.plot(smoothed_signals[-1][:1000], 'k')
+    SMOOTH_AMPLITUDE =  np.max(smoothed_signals[-1]) - np.min(smoothed_signals[-1])
+    signals_with_added_noise[i].append(np.array(signal))
+    N_SAMPLES = len(signal)
 
-            # plt.show()
-plt.show()
+    noise = smoothed_signals[-1] - signal
+    NOISE_AMPLITUDE = np.mean(np.abs(raw_signals[-1])) * 2
+    SNR = 10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE)
+    SNRs[i].append(int(SNR * 10) / 10)
+    last_std = 0.0001
+    print(SNRs[i])
+    for noise_DB in noise_DB_array:
+        # print(SNRs[i][0])
+        if noise_DB > SNRs[i][0]:
+            signals_with_added_noise[i].append([])
+            print("ABORTED")
+        else:
+            print("start ", noise_DB)
+            SNR = 0
+            while int(SNR*10) != noise_DB*10:
+                added_noise = np.random.normal(0, last_std, len(signal))
+                signal_with_noise = np.array(signal) + added_noise
+                signal_with_noise -= np.mean(signal_with_noise)
+                noise = smoothed_signals[-1] - signal_with_noise
+                NOISE_AMPLITUDE = np.mean(np.abs(noise)) * 2
+                SNR = 10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE)
+                # print(int(SNR*10), " - ", noise_DB*10)
+                if int(SNR*10) > noise_DB*10:
+                    last_std *= 2
+                else:
+                    last_std *= 0.2
+
+            SNRs[i].append(int(SNR * 10) / 10)
+            signals_with_added_noise[i].append(np.array(signal_with_noise))
+    SNRs[i] = np.mean(np.array(SNRs[i]))
+
 noise_signals_array = np.zeros((N_NOISE, N_SIGNALS, N_SAMPLES))
 
 
@@ -839,48 +837,48 @@ npzfile = np.load("../data/ecg_noisy_signals.npz")
 
 SNRs, noisez_signals_array, smoothed_signals = \
     npzfile['SNRs'], npzfile['noise_signals_array'], npzfile['smoothed_signals']
-noise_signals_array = np.zeros_like(noisez_signals_array)
-for i in range(len(noisez_signals_array)):
-    for j in range(len(noisez_signals_array[i])):
-        noise_signals_array[i][j] = process_signal(remove_noise(noisez_signals_array[i][j], moving_avg_window=60), 64, False, False, False)
+# noise_signals_array = np.zeros_like(noisez_signals_array)
+# for i in range(len(noisez_signals_array)):
+#     for j in range(len(noisez_signals_array[i])):
+#         noise_signals_array[i][j] = process_signal(remove_noise(noisez_signals_array[i][j], moving_avg_window=60), 64, False, False, False)
 
 # CONFUSION_TENSOR_[W,Z]
-N_Windows = 6000
-W = 256
-signals_models = db.ecg_biometry_models
-
-
-snrs = np.zeros((len(SNRs[1]), len(SNRs)))
-for i in range(len(SNRs)-1):
-    for j in range(len(SNRs[1])):
-        snrs[j,i] = round(SNRs[i][j])
-SNRs = snrs
-
-loss_tensors = []
-for signals, SNR in zip(noise_signals_array, SNRs[:-1]):
-    print("SNR", SNR[0])
-    filename = '../data/validation/NOISY_INDEX_6000[{0}.{1}]'.format(SNR[0], 0)
-    print(filename)
-    # npzfile = np.load(filename)+'.npz'
-    loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals, signals_models)
-    loss_tensors.append(loss_tensor)
-
-filename = '../data/validation/NOISY_INDEX_6000.npz'
-
-np.savez(filename, loss_tensors=loss_tensors)
+# N_Windows = 6000
+# W = 256
+# signals_models = db.ecg_biometry_models
 #
-m_labels = [model_info.name for model_info in signals_models]
-
-loss_tensors = np.load(filename)['loss_tensors']
-s_labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_tensors[0])[1]+1)]
-for loss_tensor in loss_tensors:
-    # classified_matrix = calculate_classification_matrix(loss_tensor)
-    process_EER(loss_tensor, N_Windows, W)
-    # print_confusion(classified_matrix, s_labels, m_labels)
-
-
-    # print(SNR[-1]*10, "-" + str(SMOOTH_AMPLITUDE/NOISE_AMPLITUDE))
-    # print(np.mean(SNR * 10))
+#
+# snrs = np.zeros((len(SNRs[1]), len(SNRs)))
+# for i in range(len(SNRs)-1):
+#     for j in range(len(SNRs[1])):
+#         snrs[j,i] = round(SNRs[i][j])
+# SNRs = snrs
+#
+# loss_tensors = []
+# for signals, SNR in zip(noise_signals_array, SNRs[:-1]):
+#     print("SNR", SNR[0])
+#     filename = '../data/validation/NOISY_INDEX_6000[{0}.{1}]'.format(SNR[0], 0)
+#     print(filename)
+#     # npzfile = np.load(filename)+'.npz'
+#     loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals, signals_models)
+#     loss_tensors.append(loss_tensor)
+#
+# filename = '../data/validation/NOISY_INDEX_6000.npz'
+#
+# np.savez(filename, loss_tensors=loss_tensors)
+# #
+# m_labels = [model_info.name for model_info in signals_models]
+#
+# loss_tensors = np.load(filename)['loss_tensors']
+# s_labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_tensors[0])[1]+1)]
+# for loss_tensor in loss_tensors:
+#     # classified_matrix = calculate_classification_matrix(loss_tensor)
+#     process_EER(loss_tensor, N_Windows, W)
+#     # print_confusion(classified_matrix, s_labels, m_labels)
+#
+#
+#     # print(SNR[-1]*10, "-" + str(SMOOTH_AMPLITUDE/NOISE_AMPLITUDE))
+#     # print(np.mean(SNR * 10))
 
 
 # print(np.mean(np.array(SNR)))

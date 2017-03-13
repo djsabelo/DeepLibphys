@@ -24,7 +24,7 @@ signal_directory = 'NOISE_BIOMETRIC_ECGs_[{0}.{1}]'.format(batch_size, window_si
 signals_without_noise = []
 signals_noise = []
 SNR = []
-full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,19)))
+full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,20)))
 for file_path in full_paths:
     signal = sio.loadmat(file_path)['val'][0]
     signal = (signal - np.mean(signal))/np.std(signal)

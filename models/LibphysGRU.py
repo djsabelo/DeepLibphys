@@ -226,7 +226,7 @@ class LibphysGRU:
                 if epoch % 10 == 0 and track_loss:
                     plt.clf()
                     plt.plot(loss[1:])
-                    plt.ylim([0, np.max(loss[-20:])])
+                    plt.ylim([np.min(loss[-20:]), np.max(loss[-100:])])
                     if epoch % 100 == 0:
                         plt.ylim([0, np.max(loss)])
                     plt.pause(0.05)

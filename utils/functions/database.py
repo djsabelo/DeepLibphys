@@ -191,10 +191,10 @@ ecg_biometry_models = [ModelInfo(Hd=256, dataset_name="bio_ecg_"+str(i),
                         directory="BIOMETRIC_ECGs_[128.256]")
               for i in range(19)]
 
-ecg_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg_"+str(i+1),
-                        name="ECG "+str(i-1),
-                        directory="CLEAN_ECGs_[256.256]")
-              for i in range(1,13)]
+ecg_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
+                        name="ECG "+str(i+1),
+                        directory="NEW_CLEANER_ECG[128.256]")
+              for i in range(0,20)]
 
 ecg_noisy_biometry_models = [ModelInfo(Hd=256, dataset_name="biometry_with_noise_"+str(i),
                         name="ECG "+str(i+1),

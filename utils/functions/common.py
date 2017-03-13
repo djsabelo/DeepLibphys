@@ -88,7 +88,7 @@ def acquire_and_process_signals(full_paths, signal_dim, decimate=None, peak_into
     return signals
 
 def remove_noise(signal, moving_avg_window=60, smooth_window=10):
-    signal = smooth(removeMovingAvg(signal, moving_avg_window), smooth_window) # smooth the signal
+    signal = smooth(remove_moving_avg(signal, moving_avg_window), smooth_window) # smooth the signal
     return signal
 
 def process_signal(signal, interval_size, peak_into_data, decimate, regression):
@@ -111,13 +111,38 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
+def process_dnn_signal(signal, interval_size):
+    signal = (signal - np.mean(signal)) / np.std(signal)
+    signal = remove_moving_avg(signal)
+    signal = remove_moving_std(signal)
+    signal = smooth(signal)
+    return descretitize_signal(signal, interval_size)
+
+
+def descretitize_signal(signal, interval_size, confidence = 0.001):
+    n, bins, patches = plt.hist(signal, 10000)
+    cum = np.cumsum(n)
+    MIN = bins[np.where(cum <= confidence * np.sum(n))[0][-1]]
+    MAX = bins[np.where(cum >= (1-confidence) * np.sum(n))[0][0]]
+    signal[signal >= MAX] = MAX
+    signal[signal <= MIN] = MIN
+
+    decimals = len(str(int(interval_size)))
+    signal -= np.min(signal)                                # removed the minimum value
+    signal = np.around(signal / np.max(signal), decimals)   # made a discrete representation of the signal
+    signal *= (interval_size - 1)                       # with "interval_size" steps (min = 0, max = interval_size-1))
+    # signal = np.around(signal)
+    plt.clf()
+    return signal.astype(int)                       # insert signal into an array of signals
+
+
 def process_web_signal(signal, interval_size, smooth_window, peak_into_data, decimate=None, window=1, smooth_type='hanning'):
                    # smooth the signal
     if (decimate is not None and isinstance(decimate, int)) and not isinstance(decimate, bool):
         signal = sig.decimate(signal, decimate)
 
     signal = smooth(signal, smooth_window, window=smooth_type)
-    signal = removeMovingAvg(signal, window)
+    signal = remove_moving_avg(signal, window)
     if peak_into_data is not False:
         start_index = np.random.random_integers(0, len(signal) - peak_into_data)
         plt.plot(signal[start_index:start_index + peak_into_data]-np.mean(signal[start_index:start_index + peak_into_data]), color='#660033')
@@ -129,16 +154,7 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
     signal *= (interval_size - 1)                           # with "interval_size" steps (min = 0, max = interval_size-1))
     return signal.astype(int)                               # insert signal into an array of signals
 
-def removeMovingAvg(signal, window_size=500, i=1):
-    window_size = 60
-
-
-    # print(bins)
-    # print(patches)
-    plt.figure(i)
-
-    plt.plot(signal)
-
+def remove_moving_avg(signal, window_size=60):
     signalx = np.zeros_like(signal)
     for i in range(len(signal)):
         n = [int(i - window_size/2), int(window_size/2 + i)]
@@ -146,38 +162,28 @@ def removeMovingAvg(signal, window_size=500, i=1):
         # if n[0] < 0:
         #     n[0] = 0
         if n[1] > len(signal):
-            n[1] = len(signal) -1
+            n[1] -= len(signal)
 
         if len(signal[n[0]:n[1]]) > 0:
             signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]]))
 
-    signal = signalx
+    return signalx
+
+
+def remove_moving_std(signal, window_size=2000):
     signalx = np.zeros_like(signal)
-    window_size = 1000
     for i in range(len(signal)):
-        n = [int(i - window_size/2), int(window_size/2 + i)]
+        n = [int(i - window_size / 2), int(window_size / 2 + i)]
 
         # if n[0] < 0:
         #     n[0] = 0
         if n[1] > len(signal):
-            n[1] = len(signal) -1
+            n[1] -= len(signal)
 
         if len(signal[n[0]:n[1]]) > 0:
             signalx[n[0]:n[1]] = signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]])
-    plt.figure(2)
-    n, bins, patches = plt.hist(signalx, 1000)
-    # print(n)
-    plt.figure(i)
-    cum = np.cumsum(n)
-    # plt.plot(bins)
-    # plt.plot(np.where(cum <= 0.05*np.sum(n))[0], bins[cum <= 0.05*np.sum(n)])
-    # plt.plot(np.where(cum >= 0.95*np.sum(n))[0], bins[cum >= 0.95*np.sum(n)])
-    plt.ylim([bins[np.where(cum <= 0.001*np.sum(n))[0][-1]], bins[np.where(cum >= 0.999*np.sum(n))[0][0]]])
 
-    plt.plot(signalx)
-    # plt.show()
-    return signal
-
+    return signalx
 
 """#####################################################################################################################
 ########################################################################################################################
