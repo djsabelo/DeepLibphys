@@ -112,18 +112,23 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
 
 
 def process_dnn_signal(signal, interval_size):
-    signal = (signal - np.mean(signal)) / np.std(signal)
+    signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
     signal = remove_moving_avg(signal)
-    signal = remove_moving_std(signal)
-    signal = smooth(signal)
-    return descretitize_signal(signal, interval_size)
+    signals = remove_moving_std(signal)
+    if len(np.shape(signal)) > 1:
+        print("processing signals")
+        signalx = np.array([smooth(signal_) for signal_ in signals])
+        return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
+    else:
+        signal = smooth(signal)
+        return descretitize_signal(signal, interval_size)
 
 
 def descretitize_signal(signal, interval_size, confidence = 0.001):
     n, bins, patches = plt.hist(signal, 10000)
-    cum = np.cumsum(n)
-    MIN = bins[np.where(cum <= confidence * np.sum(n))[0][-1]]
-    MAX = bins[np.where(cum >= (1-confidence) * np.sum(n))[0][0]]
+    distribution_sum = np.cumsum(n)
+    MIN = bins[np.where(distribution_sum <= confidence * np.sum(n))[0][-1]]
+    MAX = bins[np.where(distribution_sum >= (1-confidence) * np.sum(n))[0][0]]
     signal[signal >= MAX] = MAX
     signal[signal <= MIN] = MIN
 
@@ -165,7 +170,7 @@ def remove_moving_avg(signal, window_size=60):
             n[1] -= len(signal)
 
         if len(signal[n[0]:n[1]]) > 0:
-            signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]]))
+            signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]], axis=0))
 
     return signalx
 
@@ -181,7 +186,7 @@ def remove_moving_std(signal, window_size=2000):
             n[1] -= len(signal)
 
         if len(signal[n[0]:n[1]]) > 0:
-            signalx[n[0]:n[1]] = signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]])
+            signalx[n[0]:n[1]] = signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]], axis=0)
 
     return signalx
 

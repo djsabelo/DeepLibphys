@@ -130,9 +130,10 @@ class LibphysGRU:
                                                                             overlap=overlap, start_index=start_index)
             Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
                                                                             overlap=overlap, start_index=start_index)
+            last_training_index = int(n_windows * 0.33)
             # List of the windows to be inserted in the dataset
             if random_training:
-                window_indexes = np.random.permutation(n_windows)  # randomly select windows
+                window_indexes = np.random.permutation(last_training_index)  # randomly select windows
             else:
                 window_indexes = list(range((n_windows))) # first windows are selected
 
@@ -143,8 +144,8 @@ class LibphysGRU:
                 y_train = Y_windows[window_indexes[0:n_for_each], :]
 
                 # The rest is for test data
-                x_test = X_windows[window_indexes[n_for_each:], :]
-                y_test = Y_windows[window_indexes[n_for_each:], :]
+                x_test = X_windows[last_training_index:, :]
+                y_test = Y_windows[last_training_index:, :]
             else:
                 x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
                 y_train = np.append(y_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)

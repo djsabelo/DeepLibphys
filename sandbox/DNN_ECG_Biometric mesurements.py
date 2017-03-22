@@ -6,9 +6,11 @@ from DeepLibphys.utils.functions.common import get_signals_tests, get_random_bat
 from DeepLibphys.utils.functions.database import ModelInfo
 from scipy import interpolate
 import matplotlib.pyplot as plt
+import matplotlib
 import math
 import time
 import seaborn
+from matplotlib.backends.backend_pdf import PdfPages
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 
@@ -65,12 +67,14 @@ def calculate_loss_tensors(N_Windows, W, signals_models):
 
     return loss_tensor
 
-def calculate_loss_tensor(filename, Total_Windows, W, signals_models, noisy_index=None):
+def calculate_loss_tensor(filename, Total_Windows, W, signals_models, signals=None, noisy_index=None):
 
     n_windows = Total_Windows
     if Total_Windows / 256 > 1:
         ratio = round(Total_Windows / 256)
-    n_windows = 16
+    else:
+        ratio = 1
+    n_windows = 250
 
     windows = np.arange(int(Total_Windows/n_windows))
     N_Windows = len(windows)
@@ -86,7 +90,7 @@ def calculate_loss_tensor(filename, Total_Windows, W, signals_models, noisy_inde
     i = 0
     indexes = signals_models#[np.random.permutation(len(signals_models))]
     for model_info in indexes:
-        if noisy_index is None:
+        if signals is None:
             # [x_test, y_test] = load_test_data("GRU_" + model_info.dataset_name, + "["+str(model_info.Sd)+"."+str(model_info.Hd)+".-1.-1.-1]"
             #                               , model_info.directory)
             [x_test, y_test] = load_test_data(model_info.dataset_name, model_info.directory)
@@ -209,7 +213,6 @@ def calculate_classification_matrix(loss_tensor):
     for i in range(np.shape(loss_tensor)[1]):
         loss_tensor[:, i, :] = loss_tensor[:, i, :] - np.min(loss_tensor[:, i, :], axis=0)
         loss_tensor[:, i, :] = loss_tensor[:, i, :] / np.max(loss_tensor[:, i, :], axis=0)
-
 
 
     predicted_matrix = np.argmin(loss_tensor, axis=0)
@@ -524,7 +527,8 @@ def calculate_roc(loss_tensor, step = 0.001, last_index=1, first_index=0):
     return roc1, roc2, scores, eer
 
 
-def plot_roc(roc1, roc2, eer, N_Signals=19):
+def plot_roc(roc1, roc2, eer, N_Signals=20):
+    N_Signals = np.shape(loss_tensor)[1]
     name = 'gnuplot'
     cmap = plt.get_cmap(name)
     cmap_list = [cmap(i) for i in np.linspace(0, 1, N_Signals)]
@@ -532,12 +536,12 @@ def plot_roc(roc1, roc2, eer, N_Signals=19):
     fig_2 = "ROC True Positive Rate/False Positive Rate"
     for j in range(np.shape(loss_tensor)[0]):
         plt.figure(fig_1)
-        plt.scatter(roc1[1, :, j], roc1[0, :, j], marker='.', color=cmap_list[j], label='Signal #{0}'.format(j))
-        plt.plot(roc1[1, :, j], roc1[0, :, j], color=cmap_list[j], alpha=0.3, label='Signal #{0}'.format(j))
+        plt.scatter(roc1[1, :, j], roc1[0, :, j], marker='.', color=cmap_list[j])
+        plt.plot(roc1[1, :, j], roc1[0, :, j], color=cmap_list[j], alpha=0.3, label='Signal {0}'.format(j))
 
-        # plt.figure(fig_2)
-        # plt.scatter(roc2[1, :, j], roc2[0, :, j], marker='.', color=cmap_list[j], label='Signal #{0}'.format(j))
-        # plt.plot(roc2[1, :, j], roc2[0, :, j], color=cmap_list[j], alpha=0.3, label='Signal #{0}'.format(j))
+        plt.figure(fig_2)
+        plt.scatter(roc2[1, :, j], roc2[0, :, j], marker='.', color=cmap_list[j])
+        plt.plot(roc2[1, :, j], roc2[0, :, j], color=cmap_list[j], alpha=0.3, label='Signal {0}'.format(j))
 
     N_Signals = np.shape(eer)[1]
     for signal in range(N_Signals):
@@ -553,12 +557,12 @@ def plot_roc(roc1, roc2, eer, N_Signals=19):
     plt.xlim([0, 1])
     plt.legend()
 
-    # plt.figure(fig_2)
-    # plt.ylabel("True Positive Rate")
-    # plt.xlabel("False Positive Rate")
-    # plt.ylim([0, 1])
-    # plt.xlim([0, 1])
-    # plt.legend()
+    plt.figure(fig_2)
+    plt.ylabel("True Positive Rate")
+    plt.xlabel("False Positive Rate")
+    plt.ylim([0, 1])
+    plt.xlim([0, 1])
+    plt.legend()
     plt.show()
 
 def get_min_max(j, interval, roc):
@@ -651,13 +655,15 @@ def find_eeq(roc, j):
     return eer, new_fpr_x, new_fnr_y
 
 def process_EER(loss_tensor, N_Windows, W, iterations=10):
+    EERs = np.zeros((iterations, 2))
+    fig = plt.figure("fig", figsize=(900 / 96, 600 / 96), dpi=96)
     for iteration in range(iterations):
         N_Signals = np.shape(loss_tensor)[0]
         N_Total_Windows = np.shape(loss_tensor)[2]
 
         eers = [[], []]
 
-        batch_size_array = np.arange(1, 60)
+        batch_size_array = np.arange(1, 120)
         for batch_size in batch_size_array:
             temp_loss_tensor = calculate_min_windows_loss(loss_tensor, batch_size)
             if len(np.shape(temp_loss_tensor)) == 1 and temp_loss_tensor == -1:
@@ -665,7 +671,7 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10):
 
             roc1, roc2, scores, eer_min = calculate_roc(temp_loss_tensor, step=0.001)
             # plot_roc(roc1, roc2, eer_min)
-            print("EER MIN: {0}".format(eer_min[0]))
+            print("EER MIN: ,{0}".format(eer_min[0]))
             eers[0].append(eer_min[0, :])
             eers[1].append(eer_min[1, :])
 
@@ -673,17 +679,19 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10):
         #          eers=eers,
         #          mean_eer=np.mean(eers[0], axis=1))
 
-        plt.figure(iteration)
+
+        # plt.clf()
         seconds = batch_size_array[:len(eers[0])] * 0.33
 
-        plt.plot(seconds, np.mean(eers[0], axis=1), 'b.', label="EER MEAN")
-        plt.plot(seconds, np.mean(eers[0], axis=1), alpha=0.5, label="EER MEAN")
-        plt.plot(seconds, eers[0], alpha=0.2)
+        cmap = matplotlib.cm.get_cmap('rainbow')
+        plt.plot(seconds, np.mean(eers[0], axis=1), 'b.')
+        plt.plot(seconds, np.mean(eers[0], axis=1), color=cmap(iteration/iterations), alpha=0.5, label="iteration "+str(iteration))
+        # plt.plot(seconds, eers[0], alpha=0.2)
         index_min = np.argmin(np.mean(eers[0], axis=1))
         plt.plot(seconds[index_min], np.mean(eers[0], axis=1)[index_min], 'ro', alpha=0.6)
         plt.annotate("EER MIN = {0:5}".format(np.mean(eers[0], axis=1)[index_min]),
                      xy=(seconds[index_min], np.mean(eers[0], axis=1)[index_min] + 0.005))
-        plt.xlabel("Seconds of signal")
+        plt.xlabel("Seconds of Signal")
         plt.ylabel("Equal Error Rate")
         # for i in range(len(eers[0])):
         #     plt.figure()
@@ -694,7 +702,17 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10):
         # plt.plot(batch_size_array[index_min], eers[index_min],)
         # plt.annotate("EER MIN = {0}".format(eers[index_min]), xy=(batch_size_array[index_min], eers[index_min]))
         plt.legend()
-        plt.show()
+
+        plt.title("Mean EER for different iterations")
+        # plt.show()
+        EERs[iteration, 0] = np.mean(eers[0], axis=1)[index_min]
+        EERs[iteration, 1] = seconds[index_min]
+
+    pdf = PdfPages("img/EER_iterations.pdf")
+    pdf.savefig(fig)
+    pdf.close()
+
+    return EERs
 
 def calculate_min_windows_loss(loss_tensor, batch_size):
     N_Models = np.shape(loss_tensor)[0]
@@ -768,7 +786,7 @@ def calculate_mean_error(loss_tensor):
 # CONFUSION_TENSOR_[W,Z]
 # N_Windows = 6000
 W = 256
-N_Windows = 6000
+N_Windows = 7000
 
 
 print("Processing Biometric ECG - with #windows of "+str(N_Windows))
@@ -777,10 +795,10 @@ signals_models = np.array(signals_models)
 
 # for noisy_index in range(1,5):
 print("Processing Biometric CLEAN ECG_FULL")
-filename = '../data/validation/CLEAN_ECG_FULL'
+filename = '../data/validation/BIOMETRIC ECG'
 
 # filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(noisy_index, 1)
-loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models)
+# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models)
 
 # filename = "../data/validation/CLEAN_"
 # filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(1, 1)
@@ -804,14 +822,25 @@ labels_m = [model_info.name for model_info in signals_models]
 # labels_m = np.array(labels_m)
 # labels_s = np.array(labels_s)
 # for i in range(5,10):
-classified_matrix = calculate_classification_matrix(loss_tensor)#calculate_min_windows_loss(loss_tensor,i))
+# classified_matrix = calculate_classification_matrix(loss_tensor[:19,:19,:])#calculate_min_windows_loss(loss_tensor,i))
 
 # error_matrix = calculate_mean_error(loss_tensor)
-# print_confusion(classified_matrix.T, labels_s, labels_m)
+# print_confusion(classified_matrix, labels_s, labels_m)
 # print_confusion(error_matrix, labels_s, labels_m, norm=False)
 # process_EER(loss_tensor, N_Windows, W)
 
-process_EER(loss_tensor, N_Windows, W)
+EERs = process_EER(loss_tensor, N_Windows, W, iterations=5)
+
+print("EER minimum")
+print(EERs[:,0])
+
+print(np.mean(EERs[:, 0]))
+print(np.std(EERs[:, 0]))
+
+print("Time to reach minimum")
+print(EERs[:, 1])
+print(np.mean(EERs[:, 1]))
+print(np.std(EERs[:, 1]))
 
 
 
