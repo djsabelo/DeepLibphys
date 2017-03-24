@@ -92,6 +92,7 @@ class LibphysMBGRU(LibphysGRU):
 
         e = ((prediction - y.T) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1])
         cost_batch = self.calculate_ce_vector(o, y)
+        mse_cost_batch = self.calculate_mean_squared_error_vecor(prediction, y)
         # Total cost
         cost = (1 / self.mini_batch_size) * self.calculate_error(o, y)
 
@@ -103,6 +104,7 @@ class LibphysMBGRU(LibphysGRU):
         self.predict_class = theano.function([x, y], [prediction, e], allow_input_downcast=True)
         self.error = theano.function([x, y], e)
         self.calculate_loss_vector = theano.function([x, y], cost_batch, allow_input_downcast=True)
+        self.calculate_mse_vector = theano.function([x, y], mse_cost_batch, allow_input_downcast=True)
         self.ce_error = theano.function([x, y], cost, allow_input_downcast=True)
         self.bptt = theano.function([x, y], derivatives, allow_input_downcast=True)
 
@@ -114,9 +116,11 @@ class LibphysMBGRU(LibphysGRU):
     def calculate_error(self, O, Y):
         return T.sum(self.calculate_ce_vector(O, Y))
 
-
     def calculate_ce_vector(self, O, Y):
         return [T.sum(T.nnet.categorical_crossentropy(O[:, :, i], Y[i, :])) for i in range(self.mini_batch_size)]
+
+    def calculate_mean_squared_error_vecor(self, Pred, Y):
+        return T.mean(T.power(Pred.T-Y, 2), axis=1)
 
     def calculate_total_loss(self, X, Y):
         return np.sum([self.ce_error(X[i:i + self.mini_batch_size, :], Y[i:i + self.mini_batch_size, :])

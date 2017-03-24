@@ -81,9 +81,10 @@ signals_without_noise = np.load("signals_without_noise.npz")['signals_without_no
 
 # plt.show()
 
-for i, signal in zip(range(len(signals_without_noise)),signals_without_noise):
+for i, signal in zip(range(6,len(signals_without_noise)),signals_without_noise[6:]):
     name = 'clean_ecg' + str(i+1)
     signal2model = Signal2Model(name, signal_directory, hidden_dim=hidden_dim, batch_size=batch_size,
                                 mini_batch_size=mini_batch_size, window_size=window_size)
     model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
     model.train(signal, signal2model)
+

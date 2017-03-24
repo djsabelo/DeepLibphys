@@ -2,7 +2,7 @@ import numpy as np
 
 import DeepLibphys.models.libphys_MBGRU as GRU
 import DeepLibphys.utils.functions.database as db
-from DeepLibphys.utils.functions.common import get_signals_tests, get_random_batch, randomize_batch, plot_confusion_matrix, segment_signal
+from DeepLibphys.utils.functions.common import *
 from DeepLibphys.utils.functions.database import ModelInfo
 from scipy import interpolate
 import matplotlib.pyplot as plt
@@ -19,6 +19,59 @@ def load_test_data(filetag=None, dir_name=None):
     filename = GRU_DATA_DIRECTORY + dir_name + '/' + filetag + '_test_data.npz'
     npzfile = np.load(filename)
     return npzfile["test_data"]
+
+def make_noise_signals(full_paths, max_target_SNR=16):
+    target_SNR_array = np.arange(max_target_SNR, max_target_SNR-5, -1)
+    N_SIGNALS, N_NOISE, N_SAMPLES = len(full_paths), len(target_SNR_array), 0
+    processed_noise_array = np.zeros((N_NOISE, N_SIGNALS, len(sio.loadmat(full_paths[0])['val'][0])))
+    SNR = np.zeros(N_NOISE)
+    for i, file_path in zip(range(len(full_paths)), full_paths):
+        print("Processing " + file_path)
+        signal = sio.loadmat(file_path)['val'][0]
+        signal = remove_moving_std(remove_moving_avg((signal - np.mean(signal)) / np.std(signal)))
+        smoothed_signal = smooth(signal)
+
+        SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
+
+        last_std = 0.0001
+        j = 0
+        for target_SNR in target_SNR_array:
+            signal_with_noise, last_std = make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=last_std)
+            processed_noise_array[j, i, :] = process_dnn_signal(signal_with_noise, 64)
+            j += 1
+
+    return processed_noise_array, target_SNR_array
+
+def calculate_signal_to_noise_ratio(signal, smoothed_signal):
+    signal = signal[13000:19000]
+    smoothed_signal = smoothed_signal[13000:19000]
+    noise_signal = smoothed_signal - signal
+    SMOOTH_AMPLITUDE = np.max(smoothed_signal) - np.min(smoothed_signal)
+    NOISE_AMPLITUDE = np.mean(np.abs(noise_signal)) * 2
+    SNR = (10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE))
+    return SNR
+
+def make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=0.0001):
+    SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
+    added_noise = np.random.normal(0, last_std, len(signal))
+    signal_with_noise = np.array(np.array(signal) + added_noise)
+    print("Processing SNR {0}".format(target_SNR))
+    if SNR < target_SNR:
+        signal = smoothed_signal
+
+    while int(SNR*100) != target_SNR*100:
+
+        added_noise = np.random.normal(0, last_std, len(signal))
+        signal_with_noise = np.array(np.array(signal) + added_noise)
+        SNR = calculate_signal_to_noise_ratio(signal_with_noise, smoothed_signal)
+
+        if int(SNR*100) > target_SNR*100:
+            last_std *= 2
+        else:
+            last_std *= 0.2
+
+    return signal_with_noise, last_std
+
 
 def calculate_loss_tensors(N_Windows, W, signals_models):
     N_Versions = len(signals_models)
@@ -799,60 +852,60 @@ print("Processing Biometric ECG - with #windows of "+str(N_Windows))
 signals_models = db.ecg_clean_models
 signals_models = np.array(signals_models)
 
-# for noisy_index in range(1,5):
-print("Processing Biometric CLEAN ECG_FULL")
-filename = '../data/validation/BIOMETRIC ECG'
+MIN_NOISE_DB = 17
+#
+# noise_filename = "../data/ecg_noisy_signals[17].npz"
+noise_filename = "../data/ecg_noisy_signals.npz"
 
-# filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(noisy_index, 1)
-# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models)
+# full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,21)))
+# processed_noise_array, SNRs = make_noise_signals(full_paths, MIN_NOISE_DB)
+# np.savez(noise_filename, SNRs=SNRs, processed_noise_array=processed_noise_array)
 
-# filename = "../data/validation/CLEAN_"
-# filename = '../data/validation/NOISY_INDEX_WITH_NOISY_MODEL[{0}.{1}]'.format(1, 1)
-npzfile = np.load(filename + ".npz")
-loss_tensor, signals_models_, signals_models  = \
-    npzfile["loss_tensor"], npzfile["signals_models"], npzfile["signals_models"]
+npzfile = np.load(noise_filename)
+processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
+# CONFUSION_TENSOR_[W,Z]
+N_Windows = 7000
+W = 256
+signals_models = db.ecg_clean_models
 
-labels_s = [model_info.name for model_info in signals_models_]
-labels_m = [model_info.name for model_info in signals_models]
 
-# random_indexes = np.random.permutation(np.shape(loss_tensor)[0])
-# random_indexes_ = np.random.permutation(np.shape(loss_tensor)[1])
-# loss_tensor_ = loss_tensor
-# loss_tensor = np.zeros_like(loss_tensor)
-# for i in range(np.shape(loss_tensor_)[0]):
-#     for j in range(np.shape(loss_tensor)[1]):
-#         loss_tensor[i, j, :] = loss_tensor_[random_indexes[i], random_indexes_[j], :]
+loss_tensors = []
+titles = []
 
-# labels_m = np.array(labels_m)[random_indexes]
-# labels_s = np.array(labels_s)[random_indexes_]
-# labels_m = np.array(labels_m)
-# labels_s = np.array(labels_s)
-# for i in range(5,10):
-# classified_matrix = calculate_classification_matrix(loss_tensor[:19,:19,:])#calculate_min_windows_loss(loss_tensor,i))
+# [SNR, person, sample]
 
-# error_matrix = calculate_mean_error(loss_tensor)
-# print_confusion(classified_matrix, labels_s, labels_m)
-# print_confusion(error_matrix, labels_s, labels_m, norm=False)
-# process_EER(loss_tensor, N_Windows, W)
+# for model in signals_models:
+# filename = '../data/validation/NOISY_[17]_INDEX_7000'
+filename = '../data/validation/NOISY_INDEX_7000'
 
-EERs = process_EER(loss_tensor, N_Windows, W, iterations=2)
+signals_xxx = []
+for signals, SNR in zip(processed_noise_array, SNRs):
+    for signal in signals:
+        signals_xxx.append(signal)
+processed_noise_array = []
 
-print("EER minimum")
-print(EERs[:,0])
+# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_xxx, signals_models)
+m_labels = [model_info.name for model_info in signals_models]
 
-print(np.mean(EERs[:, 0]))
-print(np.std(EERs[:, 0]))
+loss_tensors = np.load(filename+".npz")['loss_tensor']
+loss_quartenion = np.zeros((len(SNRs), np.shape(loss_tensors)[0], np.shape(loss_tensors)[0], N_Windows))
+step = np.shape(loss_tensors)[0]
+titles = []
+for i, SNR in zip(range(len(SNRs)), SNRs):
+    title = "SIGNAL OF SNR of " + str(SNR)
+    print("Processing "+title)
+    loss_quartenion[i] = loss_tensors[:, i*step:i*step+step, :]
+    titles.append(title)
 
-print("Time to reach minimum")
-print(EERs[:, 1])
-print(np.mean(EERs[:, 1]))
-print(np.std(EERs[:, 1]))
+s_labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_quartenion)[1]+1)]
+i = 0
+for loss_tensor in loss_quartenion:
 
-"4.17481487992e-06"
-"8.34962975984e-06"
-"Time to reach minimum"
-"[ 18.15  25.08  17.82  19.8   22.44]"
-"20.658"
-"2.74991199859"
+    # classified_matrix = calculate_classification_matrix(loss_tensor)
+    process_EER(loss_tensor, N_Windows, W, iterations=10)
+    # process_EER(loss_tensor, N_Windows, W, 256, titles[i], s_labels)
+    # print_confusion(classified_matrix, s_labels, m_labels)
+    i+=1
+
 
 
