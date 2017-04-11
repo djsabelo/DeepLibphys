@@ -120,7 +120,7 @@ class LibphysGRU:
             signal_indexes = range(len(signals))
 
         self.save(signal2model.signal_directory, self.get_file_tag(-1, -1))
-
+        n_for_each = int(n_for_each)
         x_train = []
         y_train = []
         for i in signal_indexes:

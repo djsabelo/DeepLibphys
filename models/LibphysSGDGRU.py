@@ -13,6 +13,19 @@ GRU_DATA_DIRECTORY = "../data/trained/"
 class LibphysSGDGRU(LibphysGRU):
     def __init__(self, signal2model):
 
+        # Assign instance variables
+        E = np.random.uniform(-np.sqrt(1. / signal2model.signal_dim), np.sqrt(1. / signal2model.signal_dim),
+                              (signal2model.hidden_dim, signal2model.signal_dim))
+
+        U = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                              (9, signal2model.hidden_dim, signal2model.hidden_dim))
+        W = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                              (9, signal2model.hidden_dim, signal2model.hidden_dim))
+        V = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                              (signal2model.signal_dim, signal2model.hidden_dim))
+
+        b = np.zeros((9, signal2model.hidden_dim))
+        c = np.zeros(signal2model.signal_dim)
 
         super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
         self.mini_batch_size = 1
@@ -24,9 +37,8 @@ class LibphysSGDGRU(LibphysGRU):
 
         x = T.ivector('x')
         y = T.ivector('y')
-        s = [[],[],[]]
 
-        def forward_prop_step(x_t, s_prev):
+        def forward_prop_step(x_t, s_prev1, s_prev2, s_prev3):
             # Embedding layer
             x_e = E[:, x_t]
 
@@ -38,27 +50,27 @@ class LibphysSGDGRU(LibphysGRU):
                 return (T.ones_like(z) - z) * s_candidate + z * s_previous
 
             # GRU Layer 1
-            s[0] = GRU(0, U, W, b, x_e, s_prev[0])
+            s1 = GRU(0, U, W, b, x_e, s_prev1)
 
             # GRU Layer 2
-            s[1] = GRU(1, U, W, b, s[0], s_prev[1])
+            s2 = GRU(1, U, W, b, s1, s_prev2)
 
             # GRU Layer 3
-            s[2] = GRU(2, U, W, b, s[1], s_prev[2])
+            s3 =GRU(2, U, W, b, s2, s_prev3)
 
             # Final output calculation
-            o_t = T.nnet.softmax(V.dot(s[2]) + c)[0]
+            o_t = T.nnet.softmax(V.dot(s3) + c)[0]
 
-            return [o_t, s]
+            return [o_t, s1, s2, s3]
 
-        [o, s], updates = theano.scan(
+        [o, s1, s2, s3], updates = theano.scan(
             forward_prop_step,
             sequences=x,
             truncate_gradient=self.bptt_truncate,
             outputs_info=[None,
-                          [dict(initial=T.zeros(self.hidden_dim)),
-                           dict(initial=T.zeros(self.hidden_dim)),
-                           dict(initial=T.zeros(self.hidden_dim))]])
+                            dict(initial=T.zeros(self.hidden_dim)),
+                            dict(initial=T.zeros(self.hidden_dim)),
+                            dict(initial=T.zeros(self.hidden_dim))])
 
         prediction = T.argmax(o, axis=1)
         o_error = T.sum(T.nnet.categorical_crossentropy(o, y))

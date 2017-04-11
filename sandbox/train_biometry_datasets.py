@@ -2,10 +2,11 @@ import time
 
 import numpy as np
 
+from DeepLibphys.utils.functions.common import *
+from DeepLibphys.utils.functions.signal2model import Signal2Model
+
 import DeepLibphys.models.LibphysMBGRU as GRU
 import DeepLibphys.utils.functions.database as db
-from DeepLibphys.utils.functions.common import get_signals_tests, segment_signal
-from DeepLibphys.utils.functions.signal2model import Signal2Model
 
 signal_dim = 64
 hidden_dim = 256
@@ -35,16 +36,21 @@ signal_directory = 'BIOMETRIC_ECGs_[{0}.{1}]'.format(batch_size, window_size)
 
 signal_dim = 64
 hidden_dim = 256
-mini_batch_size = 16
-batch_size = 256
-window_size = 256
-signal_directory = 'CLEAN_ECGs_[{0}.{1}]'.format(batch_size, window_size)
+mini_batch_size = 15
+batch_size = 150
+n_for_each = 150/5
+signal_directory = 'NOISE_ECGs_[{0}.{1}]'.format(batch_size, window_size)
+noise_filename = "../data/ecg_noisy_signals.npz"
+npzfile = np.load(noise_filename)
+processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 
-ecgs = get_signals_tests(db.fantasia_ecgs[:-1], signal_dim)[0]
-z = 13
+ecgs = np.load("signals_without_noise.npz")['signals_without_noise']
+z = 0
 
-for i, ecg in zip(range(z+1, len(ecgs)+1), ecgs[z:]):
-    name = 'clean_ecg_' + str(i)
+for i, ecg in zip(range(z, len(ecgs)), ecgs[z:]):
+    name = 'noisy_ecg_' + str(i+1)
+    signals= [ecg] + [pna[i] for pna in processed_noise_array]
     signal2model = Signal2Model(name, signal_directory, mini_batch_size=mini_batch_size)
     model = GRU.LibphysMBGRU(signal2model)
-    model.train(ecg, signal2model)
+    model.train_block(signals, signal2model, n_for_each=n_for_each)
+        # train(ecg, signal2model)

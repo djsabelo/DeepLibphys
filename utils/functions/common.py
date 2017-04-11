@@ -6,6 +6,7 @@ import matplotlib.patheffects as pte
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io as sio
+
 import scipy.signal as sig
 from matplotlib import gridspec
 from matplotlib.font_manager import FontProperties
@@ -112,15 +113,27 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
 
 
 def process_dnn_signal(signal, interval_size):
+    plt.plot(signal[1000:2000])
+
     signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
+    plt.plot(signal[1000:2000])
+
     signal = remove_moving_avg(signal)
+    plt.plot(signal[1000:2000])
+
+
     signals = remove_moving_std(signal)
+
     if len(np.shape(signal)) > 1:
         print("processing signals")
         signalx = np.array([smooth(signal_) for signal_ in signals])
+        plt.plot(signalx[0][1000:2000])
         return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
     else:
         signal = smooth(signal)
+        ecg = descretitize_signal(signal, interval_size)
+        plt(ecg[1000:2000])
+        plt.show()
         return descretitize_signal(signal, interval_size)
 
 
@@ -197,12 +210,19 @@ def remove_moving_std(signal, window_size=2000):
 #####################################################################################################################"""
 
 
-def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir, peak_into_data, regression, smooth_window=10):
+def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir, peak_into_data=False):
     full_paths = get_fantasia_full_paths(dataset_dir, example_index_array)
-    signals = acquire_and_process_signals(full_paths, signal_dim, peak_into_data=peak_into_data, smooth_window=smooth_window, regression=regression)
+    signals = []
+    for file_path in full_paths:
+        signal = sio.loadmat(file_path)['val'][0]
+        # signal = (signal - np.mean(signal)) / np.std(signal)
+        signals.append(process_dnn_signal(signal, signal_dim))
 
-    if len(signals) > 50:
-        signals = [signals]
+        if peak_into_data:
+            if peak_into_data == True:
+                peak_into_data = 1000
+            plt.plot(signal[1000:1000+peak_into_data])
+            plt.show()
 
     y_train = np.zeros(len(signals)).tolist()
     print("Signal acquired")
@@ -785,9 +805,20 @@ def make_training_sets(batches, percentage_of_train):
 def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
                           cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
     # plt.tight_layout()
+
+
+    acc = 100*np.sum(np.diag(confusion_matrix))/np.sum(confusion_matrix)
+
     fig, ax = plt.subplots()
     ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
                                        norm, N_Windows)
+
+    ax.annotate('Accurancy of {0:.1f}%'.format(acc),
+                xy=(0.5, 0), xytext=(0, 10),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=30, ha='center', va='bottom')
+
     # ax = prepare_confusion_pie(ax, confusion_matrix)
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
@@ -1073,10 +1104,10 @@ def get_signals_tests(signals_tests, Sd=64, index=None, regression=False, type=N
                 print("Processing ecg " + str(signal_info.index-1), end=': ')
                 i = signal_info.index-1
             else:
-                X_train, Y_train = get_fantasia_dataset(Sd, list(range(1, 20)), signal_info.directory,
+                X_train, Y_train = get_fantasia_dataset(Sd, list(range(1, 21)), signal_info.directory,
                                                     peak_into_data=False, regression=regression)
         elif signal_info.type == "ecg noise":
-            X_train, Y_train = get_fantasia_noisy_data(Sd, list(range(1, 20)), noisy_index, signal_info.directory,
+            X_train, Y_train = get_fantasia_noisy_data(Sd, list(range(1, 21)), noisy_index, signal_info.directory,
                                                         peak_into_data=peak_into_data, regression=regression)
 
             signals[0] = np.asarray(X_train)
@@ -1087,7 +1118,7 @@ def get_signals_tests(signals_tests, Sd=64, index=None, regression=False, type=N
                 index = signal_info.index - 1
                 print("Processing resp data " + str(index), end=': ')
             else:
-                X_train, Y_train = get_fantasia_dataset(Sd, list(range(1, 20)), signal_info.directory,
+                X_train, Y_train = get_fantasia_dataset(Sd, list(range(1, 21)), signal_info.directory,
                                                     peak_into_data=False, regression=regression)
         elif signal_info.type == "day hrv":
             val = signal_info.file_name[:-5]+'s'

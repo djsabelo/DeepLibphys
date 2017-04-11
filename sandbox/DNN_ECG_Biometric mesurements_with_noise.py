@@ -1,9 +1,11 @@
 import numpy as np
 
-import DeepLibphys.models.libphys_MBGRU as GRU
+import DeepLibphys
+import DeepLibphys.models.LibphysMBGRU as GRU
 import DeepLibphys.utils.functions.database as db
 from DeepLibphys.utils.functions.common import *
 from DeepLibphys.utils.functions.database import ModelInfo
+from DeepLibphys.utils.functions.signal2model import Signal2Model
 from scipy import interpolate
 import matplotlib.pyplot as plt
 import matplotlib
@@ -121,69 +123,53 @@ def calculate_loss_tensors(N_Windows, W, signals_models):
     return loss_tensor
 
 def calculate_loss_tensor(filename, Total_Windows, W, signals_models, signals=None, noisy_index=None):
-
-    n_windows = Total_Windows
-    if Total_Windows / 256 > 1:
-        ratio = round(Total_Windows / 256)
-    else:
-        ratio = 1
     n_windows = 250
 
-    windows = np.arange(int(Total_Windows/n_windows))
+    windows = np.arange(int(Total_Windows / n_windows))
     N_Windows = len(windows)
-    N_Signals = len(signals_models)
-    Total_Windows = int(N_Windows*n_windows)
+    N_Models = len(signals_models)
+    Total_Windows = int(N_Windows * n_windows)
+    N_Signals = len(signals)
 
-    loss_tensor = np.zeros((N_Signals, N_Signals, Total_Windows))
-    N_Signals = len(signals_models)
+    loss_tensor = np.zeros((N_Models, N_Signals, Total_Windows))
 
     X_matrix = np.zeros((N_Signals, Total_Windows, W))
     Y_matrix = np.zeros((N_Signals, Total_Windows, W))
 
     i = 0
-    indexes = signals_models#[np.random.permutation(len(signals_models))]
-    for model_info in indexes:
-        if signals is None:
-            # [x_test, y_test] = load_test_data("GRU_" + model_info.dataset_name, + "["+str(model_info.Sd)+"."+str(model_info.Hd)+".-1.-1.-1]"
-            #                               , model_info.directory)
-            [x_test, y_test] = load_test_data(model_info.dataset_name, model_info.directory)
-            X_matrix[i, :, :], Y_matrix[i, :, :] = randomize_batch(x_test, y_test, Total_Windows)
-        else:
-            signals = get_signals_tests(db.ecg_noisy_signals[noisy_index-1], index=i, noisy_index=noisy_index,
-                                        peak_into_data=False)
-            signal_test = segment_signal(signals[0][i], 256, 0.33)
-            X_matrix[i, :, :], Y_matrix[i, :, :] = randomize_batch(signal_test[0], signal_test[1], Total_Windows)
+    first_test_index = int(len(signals[0]) * 0.33)
+    for signal in signals:
+        signal_test = segment_signal(signal[first_test_index:], 256, 0.33)
+        X_matrix[i, :, :], Y_matrix[i, :, :] = randomize_batch(signal_test[0], signal_test[1], Total_Windows)
 
         i += 1
 
     print("Loading model...")
     model_info = signals_models[0]
 
-    model = GRU.LibPhys_GRU(model_info.Sd, hidden_dim=model_info.Hd, signal_name=model_info.dataset_name,
-                            n_windows=n_windows)
+    signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
+                                hidden_dim=model_info.Hd, mini_batch_size=n_windows)
+    model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2Model)
 
     for m in range(len(signals_models)):
         model_info = signals_models[m]
-        model.signal_name = model_info.dataset_name
-        model.load(signal_name=model_info.name, filetag=model.get_file_tag(model_info.DS,
-                                                                           model_info.t),
-                   dir_name=model_info.directory)
-        print("Processing " + model_info.name)
+        model.model_name = model_info.dataset_name
+        model.load(dir_name=model_info.directory)
+        print("Processing Model " + model_info.name)
 
         for s in range(N_Signals):
-            print("Calculating loss for " + signals_models[s].name, end=';\n ')
+            print("Calculating loss for ECG " + str(s + 1), end=';\n ')
             for w in windows:
                 index = w * n_windows
-                x_test = X_matrix[s, index:index+n_windows, :]
-                y_test = Y_matrix[s, index:index+n_windows, :]
-                loss_tensor[m, s, index:index+n_windows] = np.asarray(model.calculate_loss_vector(x_test, y_test))
+                x_test = X_matrix[s, index:index + n_windows, :]
+                y_test = Y_matrix[s, index:index + n_windows, :]
+                loss_tensor[m, s, index:index + n_windows] = np.asarray(model.calculate_mse_vector(x_test, y_test))
 
     np.savez(filename + ".npz",
              loss_tensor=loss_tensor,
-             signals_models_=indexes,
              signals_models=signals_models)
 
-    return loss_tensor, indexes
+    return loss_tensor
 
 
 def calculate_fine_loss_tensor(filename, Total_Windows, W, signals_models, n_windows):
@@ -739,14 +725,16 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
     plt.title(title)
 
     if savePdf:
+        print("Saving img/EER{0}.pdf".format(file))
         pdf = PdfPages("img/EER{0}.pdf".format(file))
         pdf.savefig(fig)
+        plt.clf()
         pdf.close()
     else:
         plt.show()
     return plt
 
-def process_EER(loss_tensor, N_Windows, W, iterations=10):
+def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1):
     batch_size_array = np.arange(1, 60)
     N_Signals = np.shape(loss_tensor)[0]
     N_Total_Windows = np.shape(loss_tensor)[2]
@@ -766,10 +754,10 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10):
 
         labels = ["ECG {0}".format(i) for i in range(1, N_Signals+1)]
 
-        plot_EERs(EERs[:, :, iteration], seconds, labels, "Mean EER", "_X")
+        plot_EERs(EERs[:, :, iteration], seconds, labels, "Mean EER for SNR of {0}".format(SNR), "_7000_with_noise_{0}".format(SNR), savePdf=savePdf)
 
     labels = ["ITER {0}".format(i) for i in range(1, iterations + 1)]
-    plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_X_iter")
+    # plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_7000_with_noise_{0}".format(SNR), savePdf=savePdf)
     return EERs
 
 def calculate_min_windows_loss(loss_tensor, batch_size):
@@ -844,29 +832,34 @@ def calculate_mean_error(loss_tensor):
 
 # CONFUSION_TENSOR_[W,Z]
 # N_Windows = 6000
+N_Windows = 1000
 W = 256
-N_Windows = 7000
 
 
-print("Processing Biometric ECG - with #windows of "+str(N_Windows))
+
 signals_models = db.ecg_clean_models
 signals_models = np.array(signals_models)
 
 MIN_NOISE_DB = 17
 #
 # noise_filename = "../data/ecg_noisy_signals[17].npz"
+# filename = '../data/validation/NOISY_[17]xx_INDEX_{0}'.format(N_Windows)
+filename = '../data/validation/NOISY_INDEX_1000'
 noise_filename = "../data/ecg_noisy_signals.npz"
+print("Processing Biometric ECG - with #windows of "+str(N_Windows)+" filename: "+filename)
 
 # full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,21)))
 # processed_noise_array, SNRs = make_noise_signals(full_paths, MIN_NOISE_DB)
 # np.savez(noise_filename, SNRs=SNRs, processed_noise_array=processed_noise_array)
-
+# filename = '../data/validation/NOISY_INDEX_7000'
+# noise_filename = "../data/ecg_noisy_signals.npz"
 npzfile = np.load(noise_filename)
 processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 # CONFUSION_TENSOR_[W,Z]
-N_Windows = 7000
-W = 256
-signals_models = db.ecg_clean_models
+
+# signals_models = db.ecg_clean_models
+signals_models = db.ecg_noisy_models
+signals_models = [db.ecg_noisy_models[x] for x in range(15)]
 
 
 loss_tensors = []
@@ -875,16 +868,31 @@ titles = []
 # [SNR, person, sample]
 
 # for model in signals_models:
-# filename = '../data/validation/NOISY_[17]_INDEX_7000'
-filename = '../data/validation/NOISY_INDEX_7000'
+processed_noise_array = processed_noise_array
+noises = [[processed_noise[x] for x in range(15)] for processed_noise in processed_noise_array]
 
+processed_noise_array = noises
+
+SNRs = SNRs
 signals_xxx = []
-for signals, SNR in zip(processed_noise_array, SNRs):
-    for signal in signals:
-        signals_xxx.append(signal)
-processed_noise_array = []
 
-# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_xxx, signals_models)
+# ecgs = np.load("signals_without_noise.npz")['signals_without_noise']
+for signals, SNR in zip(processed_noise_array, SNRs):
+    # for i, signal in zip(range(len(signals)),signals):
+        # plt.figure(i)
+        # plt.plot(ecgs[i][1000:2000])
+
+    for i, signal in zip(range(len(signals)),signals):
+
+        # plt.figure(i)
+        # plt.plot(signal[1000:2000])
+        # plt.plot(ecgs[i][1000:2000])
+        # plt.clf()
+        if signal is not None:
+            signals_xxx.append(signal)
+# plt.show()
+processed_noise_array = []
+loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models, signals_xxx)
 m_labels = [model_info.name for model_info in signals_models]
 
 loss_tensors = np.load(filename+".npz")['loss_tensor']
@@ -893,18 +901,18 @@ step = np.shape(loss_tensors)[0]
 titles = []
 for i, SNR in zip(range(len(SNRs)), SNRs):
     title = "SIGNAL OF SNR of " + str(SNR)
-    print("Processing "+title)
+    print("Processing " + title)
     loss_quartenion[i] = loss_tensors[:, i*step:i*step+step, :]
     titles.append(title)
 
 s_labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_quartenion)[1]+1)]
 i = 0
-for loss_tensor in loss_quartenion:
-
-    # classified_matrix = calculate_classification_matrix(loss_tensor)
-    process_EER(loss_tensor, N_Windows, W, iterations=10)
+for SNR, loss_tensor in zip(SNRs, loss_quartenion):
+    print("SNR of "+str(SNR))
+    classified_matrix = calculate_classification_matrix(loss_tensor)
+    process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR)
     # process_EER(loss_tensor, N_Windows, W, 256, titles[i], s_labels)
-    # print_confusion(classified_matrix, s_labels, m_labels)
+    print_confusion(classified_matrix, s_labels, m_labels)
     i+=1
 
 

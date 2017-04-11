@@ -13,6 +13,7 @@ import math
 import time
 import seaborn
 from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib
 
 
 def load_test_windows(signals_models, n_classification_windows=None):
