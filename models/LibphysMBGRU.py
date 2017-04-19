@@ -4,7 +4,6 @@ from DeepLibphys.models import LibphysSGDGRU
 from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models.LibphysGRU import LibphysGRU
-import matplotlib.pyplot as plt
 import theano
 import theano.tensor as T
 import time
@@ -139,3 +138,19 @@ class LibphysMBGRU(LibphysGRU):
         model.load(self.model_name, filetag=self.get_file_tag(-5,-5))
 
         return model.generate_predicted_signal(N, starting_signal, window_seen_by_GRU_size)
+
+    def _get_new_parameters(self):
+        E = np.random.uniform(-np.sqrt(1. / self.signal_dim), np.sqrt(1. / self.signal_dim),
+                              (self.hidden_dim, self.signal_dim))
+
+        U = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (9, self.hidden_dim, self.hidden_dim))
+        W = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (9, self.hidden_dim, self.hidden_dim))
+        V = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (self.signal_dim, self.hidden_dim))
+
+        b = np.zeros((9, self.hidden_dim))
+        c = np.zeros(self.signal_dim)
+
+        return [E, U, W, V, b, c]

@@ -21,17 +21,17 @@ signals_tests = db.day_hf
 #   Load signals from rr database
 all_signals = get_signals_tests(signals_tests, signal_dim)
 # i = 1
-hidden_dim_array = [16, 32, 64, 128, 256]
-for i, hidden_dim in zip(range(1, len(hidden_dim_array) + 1), hidden_dim_array):
-    signal_directory = 'DAY_HRV_HF_['+str(hidden_dim)+'.'+str(window_size)+']'
-    for group_signals in all_signals:
-        model_name = 'day_hrv_hf_{0}'.format(i)
-        signal2model = Signal2Model(model_name, signal_directory, signal_dim=signal_dim, window_size=window_size,
-                              hidden_dim=hidden_dim, mini_batch_size=mini_batch_size, learning_rate_val=0.05, save_interval=500)
-        model = GRU.LibphysMBGRU(signal2model)
+hidden_dim = 128
+signal_directory = 'DAY_HRV_HF_['+str(hidden_dim)+'.'+str(window_size)+']'
+window_size
+for group_signals in all_signals:
+    model_name = 'day_hrv_hf_{0}'.format(i)
+    signal2model = Signal2Model(model_name, signal_directory, signal_dim=signal_dim, window_size=window_size,
+                          hidden_dim=hidden_dim, mini_batch_size=mini_batch_size, learning_rate_val=0.05, save_interval=500)
+    model = GRU.LibphysMBGRU(signal2model)
 
-        # model.load(dir_name=signal_directory, file_tag=model.get_file_tag(-5,-5))
-        model.train_block(group_signals, signal2model, n_for_each=n_for_each, random_training=True)
+    # model.load(dir_name=signal_directory, file_tag=model.get_file_tag(-5,-5))
+    model.train_block(group_signals, signal2model, n_for_each=n_for_each, random_training=True)
 #
 # signal_dim = 64
 # hidden_dim = 256

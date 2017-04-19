@@ -12,7 +12,7 @@ import numpy as np
 # get_fantasia_dataset(64, [1], 'Fantasia/ECG/mat/')
 
 
-model_info = db.ecg_clean_models
+model_info = db.ecg_1024_clean_models
 signals = []
 for model_info in db.ecg_clean_models:
     signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
@@ -42,7 +42,7 @@ for model_info in db.ecg_clean_models:
 
     signals.append(np.array(signal))
 
-np.savez("synthesized_signals.npz", synth_signals=signals)
+np.savez("synthesized_signals_1024.npz", synth_signals=signals)
     # x.append((i+1)/fz)
     #
     # plt.clf()

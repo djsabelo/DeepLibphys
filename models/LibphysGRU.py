@@ -1,5 +1,6 @@
 import numpy as np
 from DeepLibphys.utils.functions.common import segment_signal, ModelType
+from abc import ABCMeta, abstractmethod
 from DeepLibphys.utils.functions.signal2model import *
 import time
 import sys
@@ -90,7 +91,7 @@ class LibphysGRU:
 
 
     def train_block(self, signals, signal2model, signal_indexes=None, n_for_each=12, overlap=0.33, random_training=True,
-                    start_index=0, track_loss=None, loss_interval=1):
+                    start_index=0, track_loss=False, loss_interval=1):
         """
         This method embraces several datasets (or one) according to a number of records for each
 
@@ -178,6 +179,8 @@ class LibphysGRU:
         count_to_break = 0
         count_up_slope = 0
         test_gradient = False
+        is_nan = False
+        last_parameters = self.get_parameters()
         if self.current_learning_rate <= lower_learning_rate:
             self.current_learning_rate = 0.00001
 
@@ -195,8 +198,18 @@ class LibphysGRU:
 
                     relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
                     if math.isnan(loss[-1]):
-                        loss.pop()
-                        relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
+                        if is_nan:
+                            self.restart_parameters()
+                            print("Restarting parameters due to NaN loss")
+                        else:
+                            loss.pop()
+                            self.set_parameters(last_parameters)
+                            relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
+                            is_nan = True
+                    else:
+                        last_parameters = self.get_parameters()
+                        is_nan = False
+
                     if relative_loss_gradient < 0 and epoch > 10:
                         count_up_slope += 1
                         if count_up_slope >= 5:
@@ -224,13 +237,13 @@ class LibphysGRU:
                     elif test_gradient:
                         test_gradient = False
 
-                if epoch % 10 == 0 and track_loss:
-                    plt.clf()
-                    plt.plot(loss[1:])
-                    plt.ylim([np.min(loss[-20:]), np.max(loss[-100:])])
-                    if epoch % 100 == 0:
-                        plt.ylim([0, np.max(loss)])
-                    plt.pause(0.05)
+                # if epoch % 10 == 0 and track_loss:
+                #     plt.clf()
+                #     plt.plot(loss[1:])
+                #     plt.ylim([np.min(loss[-20:]), np.max(loss[-100:])])
+                #     if epoch % 100 == 0:
+                #         plt.ylim([0, np.max(loss)])
+                #     plt.pause(0.05)
 
                 t1 = time.time()
             if epoch % 10 == 0 or epoch == 0:
@@ -241,6 +254,7 @@ class LibphysGRU:
                 # One SGD step
                 ind = indexes[i:i + self.mini_batch_size]
                 self.sgd_step(x_train[ind, :], y_train[ind, :], self.current_learning_rate, signal2model.decay)
+
 
             if epoch % 10 == 0 or epoch == 0:
                 t2 = time.time()
@@ -417,3 +431,32 @@ class LibphysGRU:
             dir_name = self.model_name.upper()
 
         return dir_name+'[{0}.{1}]'.format(B, W)
+
+    def get_parameters(self):
+        return [self.E.get_value(), self.V.get_value(), self.U.get_value(), self.W.get_value(), self.b.get_value(),
+                self.c.get_value()]
+
+    def set_parameters(self, parameters):
+        self.E, self.V, self.U, self.W, self.b, self.c = parameters
+
+    def restart_parameters(self):
+        E, V, U, W, b, c = self._get_new_parameters()
+
+        self.E = theano.shared(name='E', value=E.astype(theano.config.floatX))
+        self.U = theano.shared(name='U', value=U.astype(theano.config.floatX))
+        self.W = theano.shared(name='W', value=W.astype(theano.config.floatX))
+        self.V = theano.shared(name='V', value=V.astype(theano.config.floatX))
+        self.b = theano.shared(name='b', value=b.astype(theano.config.floatX))
+        self.c = theano.shared(name='c', value=c.astype(theano.config.floatX))
+
+        # SGD / rmsprop: Initialize parameters
+        self.mE = theano.shared(name='mE', value=np.zeros(E.shape).astype(theano.config.floatX))
+        self.mU = theano.shared(name='mU', value=np.zeros(U.shape).astype(theano.config.floatX))
+        self.mV = theano.shared(name='mV', value=np.zeros(V.shape).astype(theano.config.floatX))
+        self.mW = theano.shared(name='mW', value=np.zeros(W.shape).astype(theano.config.floatX))
+        self.mb = theano.shared(name='mb', value=np.zeros(b.shape).astype(theano.config.floatX))
+        self.mc = theano.shared(name='mc', value=np.zeros(c.shape).astype(theano.config.floatX))
+
+    @abstractmethod
+    def _get_new_parameters(self):
+        pass

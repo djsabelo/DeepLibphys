@@ -1,4 +1,5 @@
 import numpy as np
+import theano.gpuarray
 
 import DeepLibphys
 import DeepLibphys.models.LibphysMBGRU as GRU
@@ -16,11 +17,13 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 
+
 def load_test_data(filetag=None, dir_name=None):
     print("Loading test data...")
     filename = GRU_DATA_DIRECTORY + dir_name + '/' + filetag + '_test_data.npz'
     npzfile = np.load(filename)
     return npzfile["test_data"]
+
 
 def make_noise_signals(full_paths, max_target_SNR=16):
     target_SNR_array = np.arange(max_target_SNR, max_target_SNR-5, -1)
@@ -44,6 +47,7 @@ def make_noise_signals(full_paths, max_target_SNR=16):
 
     return processed_noise_array, target_SNR_array
 
+
 def calculate_signal_to_noise_ratio(signal, smoothed_signal):
     signal = signal[13000:19000]
     smoothed_signal = smoothed_signal[13000:19000]
@@ -52,6 +56,7 @@ def calculate_signal_to_noise_ratio(signal, smoothed_signal):
     NOISE_AMPLITUDE = np.mean(np.abs(noise_signal)) * 2
     SNR = (10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE))
     return SNR
+
 
 def make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=0.0001):
     SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
@@ -121,6 +126,7 @@ def calculate_loss_tensors(N_Windows, W, signals_models):
              signals_tests=signals_info)
 
     return loss_tensor
+
 
 def calculate_loss_tensor(filename, Total_Windows, W, signals_models, signals=None, noisy_index=None):
     n_windows = 250
@@ -218,6 +224,7 @@ def calculate_fine_loss_tensor(filename, Total_Windows, W, signals_models, n_win
 
     return loss_tensor
 
+
 def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_tests, N_Windows, no_numbers=False):
     labels_model = np.asarray(np.zeros(len(Mod) * 2, dtype=np.str), dtype=np.object)
     labels_signals = np.asarray(np.zeros(len(Sig) * 2, dtype=np.str), dtype=np.object)
@@ -238,6 +245,7 @@ def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_te
 
     return sinal_predicted_matrix, labels_model, labels_signals
 
+
 def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_tests, N_Windows, no_numbers=False):
     labels_model = np.asarray(np.zeros(len(Mod) * 2, dtype=np.str), dtype=np.object)
     labels_signals = np.asarray(np.zeros(len(Sig) * 2, dtype=np.str), dtype=np.object)
@@ -245,6 +253,7 @@ def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_te
     labels_signals[list(range(1, len(Sig) * 2, 2))] = [signals_tests[i].name for i in Sig]
 
     return calculate_classification_matrix(loss_tensor[Mod][:, Sig, :]), labels_model, labels_signals
+
 
 def calculate_classification_matrix(loss_tensor):
     N_Windows = np.shape(loss_tensor)[2]
@@ -322,6 +331,7 @@ def get_confusion_matrix(labels, signal_predicted_matrix):
 
     return confusion_tensor, correct, wrong, rejection
 
+
 def get_signal_confusion_matrix(signal_predicted_matrix):
     signal_list = list(range(np.shape(signal_predicted_matrix)[0]))
     confusion_tensor = np.zeros((len(signal_list), 2, 2))
@@ -341,6 +351,7 @@ def get_signal_confusion_matrix(signal_predicted_matrix):
         rejection_rate[signal] = len(np.where(signal_predicted_matrix[signal, :] == rejection_signal)[0]) / N_Windows
 
     return confusion_tensor, rejection_rate
+
 
 def get_classification_confusion(signal_predicted_tensor):
     signal_list = np.arange(np.shape(signal_predicted_tensor)[0])
@@ -504,6 +515,7 @@ def calculate_variables(loss_tensor, threshold=0.1, index=None):
 
     return scores
 
+
 def calculate_roc(loss_tensor, step = 0.001, last_index=1, first_index=0):
     last_index += step
     first_index -= step
@@ -603,6 +615,7 @@ def plot_roc(roc1, roc2, eer, N_Signals=20):
     plt.legend()
     plt.show()
 
+
 def get_min_max(j, interval, roc):
     """
 
@@ -633,6 +646,7 @@ def get_min_max(j, interval, roc):
             min_max[0] = 0
 
     return min_max
+
 
 def find_eeq(roc, j):
     interval = 10
@@ -734,6 +748,7 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
         plt.show()
     return plt
 
+
 def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1):
     batch_size_array = np.arange(1, 60)
     N_Signals = np.shape(loss_tensor)[0]
@@ -759,6 +774,7 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1):
     labels = ["ITER {0}".format(i) for i in range(1, iterations + 1)]
     # plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_7000_with_noise_{0}".format(SNR), savePdf=savePdf)
     return EERs
+
 
 def calculate_min_windows_loss(loss_tensor, batch_size):
     N_Models = np.shape(loss_tensor)[0]
@@ -913,7 +929,7 @@ for SNR, loss_tensor in zip(SNRs, loss_quartenion):
     process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR)
     # process_EER(loss_tensor, N_Windows, W, 256, titles[i], s_labels)
     print_confusion(classified_matrix, s_labels, m_labels)
-    i+=1
+    i += 1
 
 
 
