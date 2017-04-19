@@ -59,11 +59,9 @@ for i in range(19):
     signals[i] = [signals_without_noise[0][i]] + [signals_with_noise[j][0][i] for j in range(4)]
 
 # train each signal from fantasia
-for i in range(2, 19):
-    name = 'biometry_with_noise_' + str(i)
+for i, ecg in zip(range(z, len(ecgs)), ecgs[z:]):
+    name = 'noisy_ecg_' + str(i+1)
+    signals= [ecg] + [pna[i] for pna in processed_noise_array]
     signal2model = Signal2Model(name, signal_directory, mini_batch_size=mini_batch_size)
     model = GRU.LibphysMBGRU(signal2model)
-    if i==2:
-        model.load(dir_name=signal_directory, file_tag=model.get_file_tag(0,1000))
-
-    model.train_block(signals[i], signal2model, n_for_each=n_for_each, loss_interval=1)
+    model.train_block(signals, signal2model, n_for_each=n_for_each)
