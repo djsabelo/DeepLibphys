@@ -702,8 +702,8 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
 
     mean_EERs = np.mean(EERs, axis=0)
     index_min = np.argmin(mean_EERs)
-    plt.plot(time, EER, 'b.', alpha=0.5)
-    plt.plot(time, EER, 'b-', alpha=0.5, label="Mean")
+    plt.plot(time, mean_EERs, 'b.', alpha=0.5)
+    plt.plot(time, mean_EERs, 'b-', alpha=0.5, label="Mean")
     plt.plot(time[index_min], np.min(mean_EERs), 'ro', alpha=0.6)
     indexi = 0.6 * np.max(time)
     indexj = 0.5 * (np.max(EER) - np.min(EER))
@@ -734,7 +734,7 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
         plt.show()
     return plt
 
-def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1):
+def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1, name=""):
     batch_size_array = np.arange(1, 60)
     N_Signals = np.shape(loss_tensor)[0]
     N_Total_Windows = np.shape(loss_tensor)[2]
@@ -754,10 +754,10 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10, savePdf=True, SNR=1):
 
         labels = ["ECG {0}".format(i) for i in range(1, N_Signals+1)]
 
-        plot_EERs(EERs[:, :, iteration], seconds, labels, "Mean EER for SNR of {0}".format(SNR), "_SNR_{0}".format(SNR), savePdf=savePdf)
+        plot_EERs(EERs[:, :, iteration], seconds, labels, "Mean EER for SNR of {0}".format(SNR), "_SNR_{0}{1}".format(SNR, name), savePdf=savePdf)
 
     labels = ["ITER {0}".format(i) for i in range(1, iterations + 1)]
-    plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_SNR_ITER_{0}".format(SNR), savePdf=savePdf)
+    plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_SNR_ITER_{0}{1}".format(SNR, name), savePdf=savePdf)
     return EERs
 
 def calculate_min_windows_loss(loss_tensor, batch_size):
@@ -835,7 +835,7 @@ def calculate_mean_error(loss_tensor):
 N_Windows = 1000
 W = 256
 
-snr = 9
+snr = 12
 
 signals_models = db.ecg_clean_models
 signals_models = np.array(signals_models)
@@ -844,7 +844,8 @@ signals_models = np.array(signals_models)
 #
 # noise_filename = "../data/ecg_noisy_signals[17].npz"
 # filename = '../data/validation/NOISY_[17]xx_INDEX_{0}'.format(N_Windows)
-filename = '../data/validation/NOISY_INDEX_{0}'.format(snr)
+# filename = '../data/validation/NOISY_INDEX_{0}'.format(snr)
+filename = '../data/validation/NOISY_INDEX_WITHOUT_NOISE{0}'.format(snr)
 noise_filename = "../data/ecg_noisy_signals.npz"
 print("Processing Biometric ECG - with #windows of "+str(N_Windows)+" filename: "+filename)
 
@@ -858,9 +859,9 @@ processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 # CONFUSION_TENSOR_[W,Z]
 
 # signals_models = db.ecg_clean_models
-signals_models = db.ecg_SNR_9
+signals_models = db.ecg_SNR_12
 # signals_models = [db.ecg_noisy_models[x] for x in range(15)]
-signals = processed_noise_array[SNRs == snr]
+signals = []# processed_noise_array[SNRs == snr]
 SNRs = SNRs[SNRs == snr]
 
 loss_tensors = []
@@ -878,7 +879,7 @@ SNRs = SNRs
 signals_xxx = []
 
 ecgs = np.load("signals_without_noise.npz")['signals_without_noise']
-for signals, SNR in zip(processed_noise_array, SNRs):
+for signals, SNR in zip(ecgs, SNRs):
     # for i, signal in zip(range(len(signals)),signals):
         # plt.figure(i)
         # plt.plot(ecgs[i][1000:2000])
@@ -913,13 +914,13 @@ labels = []
 for SNR, loss_tensor in zip(SNRs, loss_quartenion):
     print("SNR of "+str(SNR))
     # classified_matrix = calculate_classification_matrix(loss_tensor)
-    EERs.append(np.mean(process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR), axis=0))
+    EERs.append(np.mean(process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR, name="_WITH_NOISE_"), axis=0))
     # process_EER(loss_tensor, N_Windows, W, 256, titles[i], s_labels)
     # print_confusion(classified_matrix, s_labels, m_labels)
     labels.append(str(SNR))
     i+=1
 
-seconds = np.arange(1, 60) * 0.33
-plot_EERs(np.array(EERs), seconds, labels, "Mean EER for SNR of {0}".format(SNR), "all_SNR", savePdf=True)
+# seconds = np.arange(1, 60) * 0.33
+# plot_EERs(np.array(EERs), seconds, labels, "Mean EER for SNR of {0}".format(SNR), "all_SNR", savePdf=True)
 
 
