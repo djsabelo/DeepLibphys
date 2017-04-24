@@ -211,6 +211,11 @@ ecg_SNR_9 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_9"+str(i),
                         directory="CLEAN_ECG_BIOMETRY[256.256]")
               for i in range(1, 21)]
 
+ecg_SNR_8 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_8"+str(i),
+                        name="ECG "+str(i),
+                        directory="CLEAN_ECG_BIOMETRY[256.256]")
+              for i in range(1, 21)]
+
 web_group_x_models = [ModelInfo(Hd=256, dataset_name=("web_group_x["+str(i)+"]"),
                         name="WEB GROUP X "+str(i),
                         directory="WEB_[64.256]")
