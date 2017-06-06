@@ -835,7 +835,7 @@ def calculate_mean_error(loss_tensor):
 N_Windows = 1000
 W = 256
 
-snr = 12
+snr = 8
 
 signals_models = db.ecg_clean_models
 signals_models = np.array(signals_models)
@@ -845,7 +845,7 @@ signals_models = np.array(signals_models)
 # noise_filename = "../data/ecg_noisy_signals[17].npz"
 # filename = '../data/validation/NOISY_[17]xx_INDEX_{0}'.format(N_Windows)
 # filename = '../data/validation/NOISY_INDEX_{0}'.format(snr)
-filename = '../data/validation/NOISY_INDEX_WITHOUT_NOISE{0}'.format(snr)
+filename = '../data/validation/NOISY_INDEX_WITH_NOISE{0}'.format(snr)
 noise_filename = "../data/ecg_noisy_signals.npz"
 print("Processing Biometric ECG - with #windows of "+str(N_Windows)+" filename: "+filename)
 
@@ -859,7 +859,7 @@ processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 # CONFUSION_TENSOR_[W,Z]
 
 # signals_models = db.ecg_clean_models
-signals_models = db.ecg_SNR_12
+signals_models = db.ecg_SNR_8
 # signals_models = [db.ecg_noisy_models[x] for x in range(15)]
 signals = []# processed_noise_array[SNRs == snr]
 SNRs = SNRs[SNRs == snr]
@@ -875,10 +875,12 @@ processed_noise_array = processed_noise_array
 # noises = [[processed_noise[x] for x in range(15)] for processed_noise in processed_noise_array]
 # processed_noise_array = noises
 
-SNRs = SNRs
 signals_xxx = []
 
-ecgs = np.load("signals_without_noise.npz")['signals_without_noise']
+ecgs = [np.load("signals_without_noise.npz")['signals_without_noise']]
+processed_noise_array = []
+# ecgs =processed_noise_array[SNRs==snr]
+SNRs = SNRs[SNRs==snr]
 for signals, SNR in zip(ecgs, SNRs):
     # for i, signal in zip(range(len(signals)),signals):
         # plt.figure(i)
@@ -914,7 +916,7 @@ labels = []
 for SNR, loss_tensor in zip(SNRs, loss_quartenion):
     print("SNR of "+str(SNR))
     # classified_matrix = calculate_classification_matrix(loss_tensor)
-    EERs.append(np.mean(process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR, name="_WITH_NOISE_"), axis=0))
+    EERs.append(np.mean(process_EER(loss_tensor, N_Windows, W, iterations=1, savePdf=True, SNR=SNR, name="_WITHOUT_NOISE_"), axis=0))
     # process_EER(loss_tensor, N_Windows, W, 256, titles[i], s_labels)
     # print_confusion(classified_matrix, s_labels, m_labels)
     labels.append(str(SNR))
