@@ -13,4 +13,4 @@ signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signa
                                 hidden_dim=model_info.Hd)
 model = GRU.LibphysSGDGRU(signal2Model)
 
-model.synthesize_signal()
+Z = model.synthesize_signal(4)

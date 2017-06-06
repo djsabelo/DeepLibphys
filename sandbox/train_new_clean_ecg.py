@@ -72,30 +72,30 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
     np.savez("signals_without_noise.npz", signals_without_noise=signals_without_noise)
 
 
-def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval):
+def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
     for i, signal in zip(indexes, signals):
         name = 'clean_ecg' + str(i+1)
-        signal2model = Signal2Model(name, signal_directory, hidden_dim=hidden_dim, batch_size=batch_size,
-                                    mini_batch_size=mini_batch_size, window_size=window_size, save_interval=save_interval)
-
+        signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
+                                    mini_batch_size=mini_batch_size, window_size=window_size,
+                                    save_interval=save_interval)
+        print("Compiling Model {0}".format(name))
         model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
-        model.train(signal, signal2model, )
+        print("Initiating training... ")
+        model.train(signal, signal2model)
 
-signal_dim = 64
+signal_dim = 256
 hidden_dim = 256
 mini_batch_size = 16
-batch_size = 256
+batch_size = 128
 window_size = 1024
 save_interval = 1000
 signal_directory = 'CLEAN_ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = [11,12]
+indexes = np.arange(1, len(db.fantasia_ecgs)+1)
 
 print("Loading signals...")
-signals = np.load("signals_without_noise.npz")['signals_without_noise'][indexes]
+# signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
+signals, y_train = get_fantasia_dataset(signal_dim, indexes, db.fantasia_ecgs[0].directory, peak_into_data=False)
 
-train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals, save_interval)
-
-
-
-
+train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals, save_interval,
+               signal_dim)

@@ -26,28 +26,27 @@ def create_history(subject):
     signal = [10]
     window_size = 512
     fz = 250
-    N = 5000
+    N = 4000
     titles = []
     signals = []
-    for epoch in [-1, 5, 10, 15, 50, 100, -5]:
+    for epoch in [-1, 5, 10, 30, 100, -5]:
         signal = [np.random.randint(0, 63, size=1)[0]]
-        try:
-            if epoch < 0:
-                file_tag = model.get_file_tag(epoch, epoch)
-            else:
-                file_tag = model.get_file_tag(0, epoch)
 
-            model.load(file_tag=file_tag, dir_name=model_info.directory)
-            print("Processing epoch " + str(epoch))
-            for i in range(N):
-                # print(i)
-                signal.append(model.generate_online_predicted_signal(signal, window_size))
-                x.append((i+1)/fz)
+        if epoch < 0:
+            file_tag = model.get_file_tag(epoch, epoch)
+        else:
+            file_tag = model.get_file_tag(0, epoch)
 
-            titles.append("Epoch {0}".format(epoch))
-            signals.append(np.array(signal))
-        except FileNotFoundError:
-            pass
+        model.load(file_tag=file_tag, dir_name=model_info.directory)
+        print("Processing epoch " + str(epoch))
+        for i in range(N):
+            # print(i)
+            signal.append(model.generate_online_predicted_signal(signal, window_size, uncertaintly=0.05))
+            x.append((i+1)/fz)
+
+        titles.append("Epoch {0}".format(epoch))
+        signals.append(np.array(signal))
+
 
     np.savez("../data/history_of_{0}.npz".format(subject), titles=titles, signals=signals, t=x)
     return [titles, signals, x]

@@ -10,47 +10,62 @@ import theano
 import theano.tensor as T
 import matplotlib.pyplot as plt
 
-GRU_DATA_DIRECTORY = "../data/trained/"
+GRU_DATA_DIRECTORY = "/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/"
 
 
 class LibphysGRU:
     def __init__(self, signal2model, model_type, parameters):
-        # Assign instance variables
-        self.model_type = model_type
-        self.signal_type = signal2model.signal_type
-        self.signal_dim = signal2model.signal_dim
 
-        if self.signal_dim is None:
-            self.signal_dim = "RG"
+            # Assign instance variables
+            self.model_type = model_type
+            if signal2model is not None:
+                self.signal_type = signal2model.signal_type
+                self.signal_dim = signal2model.signal_dim
 
-        self.hidden_dim = signal2model.hidden_dim
-        self.bptt_truncate = signal2model.bptt_truncate
-        self.current_learning_rate = signal2model.learning_rate_val
-        self.model_name = signal2model.model_name
-        self.start_time = 0
-        self.signal_dim = signal2model.signal_dim
-        self.mini_batch_size = signal2model.mini_batch_size
+                if self.signal_dim is None:
+                    self.signal_dim = "RG"
 
-        # Theano: Created GRU variables
-        E, U, W, V, b, c = parameters
+                self.hidden_dim = signal2model.hidden_dim
+                self.bptt_truncate = signal2model.bptt_truncate
+                self.current_learning_rate = signal2model.learning_rate_val
+                self.model_name = signal2model.model_name
+                self.start_time = 0
+                self.signal_dim = signal2model.signal_dim
+                self.mini_batch_size = signal2model.mini_batch_size
 
-        # SGD / rmsprop: Initialize parameters
+                # Theano: Created GRU variables
+                E, U, W, V, b, c = parameters
 
-        # Theano: Created shared variables
-        self.E = theano.shared(name='E', value=E.astype(theano.config.floatX))
-        self.U = theano.shared(name='U', value=U.astype(theano.config.floatX))
-        self.W = theano.shared(name='W', value=W.astype(theano.config.floatX))
-        self.V = theano.shared(name='V', value=V.astype(theano.config.floatX))
-        self.b = theano.shared(name='b', value=b.astype(theano.config.floatX))
-        self.c = theano.shared(name='c', value=c.astype(theano.config.floatX))
+                # SGD / rmsprop: Initialize parameters
 
-        # SGD / rmsprop: Initialize parameters
-        self.mE = theano.shared(name='mE', value=np.zeros(E.shape).astype(theano.config.floatX))
-        self.mU = theano.shared(name='mU', value=np.zeros(U.shape).astype(theano.config.floatX))
-        self.mV = theano.shared(name='mV', value=np.zeros(V.shape).astype(theano.config.floatX))
-        self.mW = theano.shared(name='mW', value=np.zeros(W.shape).astype(theano.config.floatX))
-        self.mb = theano.shared(name='mb', value=np.zeros(b.shape).astype(theano.config.floatX))
-        self.mc = theano.shared(name='mc', value=np.zeros(c.shape).astype(theano.config.floatX))
+                # Theano: Created shared variables
+                self.E = theano.shared(name='E', value=E.astype(theano.config.floatX))
+                self.U = theano.shared(name='U', value=U.astype(theano.config.floatX))
+                self.W = theano.shared(name='W', value=W.astype(theano.config.floatX))
+                self.V = theano.shared(name='V', value=V.astype(theano.config.floatX))
+                self.b = theano.shared(name='b', value=b.astype(theano.config.floatX))
+                self.c = theano.shared(name='c', value=c.astype(theano.config.floatX))
+
+                # SGD / rmsprop: Initialize parameters
+                self.mE = theano.shared(name='mE', value=np.zeros(E.shape).astype(theano.config.floatX))
+                self.mU = theano.shared(name='mU', value=np.zeros(U.shape).astype(theano.config.floatX))
+                self.mV = theano.shared(name='mV', value=np.zeros(V.shape).astype(theano.config.floatX))
+                self.mW = theano.shared(name='mW', value=np.zeros(W.shape).astype(theano.config.floatX))
+                self.mb = theano.shared(name='mb', value=np.zeros(b.shape).astype(theano.config.floatX))
+                self.mc = theano.shared(name='mc', value=np.zeros(c.shape).astype(theano.config.floatX))
+            else:
+                self.signal_type = 0
+                self.signal_dim = 0
+                self.hidden_dim = 0
+                self.bptt_truncate = -1
+                self.current_learning_rate = 0
+                self.model_name = ""
+                self.start_time = 0
+                self.signal_dim = 0
+                self.mini_batch_size = 0
+
+                self.E, self.U, self.W, self.V, self.b, self.c = [], [], [], [], [], []
+
 
     def calculate_gradients(self, cost, parameters):
         return [T.grad(cost, parameter) for parameter in parameters]
@@ -73,7 +88,7 @@ class LibphysGRU:
         mc = self.get_m(decay, self.mc, dc)
 
         self.sgd_step = theano.function(
-            [x, y, learning_rate, theano.In(decay, value=0.9)],
+            [x, y, learning_rate, theano.In(decay, value=0.95)],
             [],
             updates=[(E, E - learning_rate * dE / T.sqrt(mE + 1e-6)),
                      (U, U - learning_rate * dU / T.sqrt(mU + 1e-6)),
@@ -88,7 +103,6 @@ class LibphysGRU:
                      (self.mb, mb),
                      (self.mc, mc)
                      ], allow_input_downcast=True)
-
 
     def train_block(self, signals, signal2model, signal_indexes=None, n_for_each=12, overlap=0.33, random_training=True,
                     start_index=0, track_loss=False, loss_interval=1):
@@ -121,71 +135,88 @@ class LibphysGRU:
             signal_indexes = range(len(signals))
 
         self.save(signal2model.signal_directory, self.get_file_tag(-1, -1))
-        n_for_each = int(n_for_each)
+
         x_train = []
         y_train = []
         for i in signal_indexes:
 
             # Creation of the Time Windows from the dataset
-            X_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][:-1], signal2model.window_size,
-                                                                            overlap=overlap, start_index=start_index)
-            Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
-                                                                            overlap=overlap, start_index=start_index)
-            last_training_index = int(n_windows * 0.33)
-            # List of the windows to be inserted in the dataset
-            if random_training:
-                window_indexes = np.random.permutation(last_training_index)  # randomly select windows
+            if n_for_each == 1:
+                if len(x_train) == 0:
+                    x_train = signals[i][:signal2model.window_size]
+                    y_train = signals[i][1:signal2model.window_size + 1]
+                else:
+                    x_train = np.vstack((x_train, signals[i][:signal2model.window_size]))
+                    y_train = np.vstack((y_train, signals[i][1:signal2model.window_size+1]))
             else:
-                window_indexes = list(range((n_windows))) # first windows are selected
+                X_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][:-1], signal2model.window_size,
+                                                                                overlap=overlap, start_index=start_index)
+                Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
+                                                                                overlap=overlap, start_index=start_index)
+                last_training_index = int(n_windows * 0.33)
+                # List of the windows to be inserted in the dataset
+                if random_training:
+                    window_indexes = np.random.permutation(last_training_index)  # randomly select windows
+                else:
+                    window_indexes = list(range((n_windows))) # first windows are selected
 
-            # Insertion of the windows of this signal in the general dataset
-            if len(x_train) == 0:
-                # First is for train data
-                x_train = X_windows[window_indexes[0:n_for_each], :]
-                y_train = Y_windows[window_indexes[0:n_for_each], :]
+                # Insertion of the windows of this signal in the general dataset
+                if len(x_train) == 0:
+                    # First is for train data
+                    x_train = X_windows[window_indexes[0:n_for_each], :]
+                    y_train = Y_windows[window_indexes[0:n_for_each], :]
 
-                # The rest is for test data
-                x_test = X_windows[last_training_index:, :]
-                y_test = Y_windows[last_training_index:, :]
-            else:
-                x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
-                y_train = np.append(y_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
-                x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
-                y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
+                    # The rest is for test data
+                    x_test = X_windows[last_training_index:, :]
+                    y_test = Y_windows[last_training_index:, :]
+                else:
+                    x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
+                    y_train = np.append(y_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
+                    x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
+                    y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
 
-        # Save test data
-        self.save_test_data(signal2model.signal_directory, [x_test, y_test])
+                # Save test data
+                self.save_test_data(signal2model.signal_directory, [x_test, y_test])
 
         # Start time recording
         self.start_time = time.time()
         t1 = time.time()
 
         # Start training model
-        self.train_model(x_train, y_train, signal2model, track_loss, loss_interval)
+        returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval)
 
         print("Dataset trained in: ~%d seconds" % int(time.time() - t1))
 
         # Model last training is then saved
-        self.save(signal2model.signal_directory, self.get_file_tag(-5, -5))
+        if returned:
+            self.save(signal2model.signal_directory, self.get_file_tag(-5, -5))
+            return True
+        else:
+            return False
 
     def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1):
-        self.train_block([X], signal2model, [0], signal2model.batch_size, overlap, random_training, start_index, loss_interval)
+        return self.train_block([X], signal2model, [0], signal2model.batch_size, overlap, random_training, start_index, loss_interval)
 
     def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1):
+        # print(x_train)
+        # print(y_train)
         loss = [self.calculate_loss(x_train, y_train)]
-        lower_error_threshold, higher_error_threshold = [0.00001, 1]
-        lower_error = 10**(-4)
-        lower_learning_rate = 0.000000001
+        lower_error_threshold, higher_error_threshold = [10**(-5), 1]
+        lower_error = 10**(-3)
+        lower_learning_rate = 10**(-5)
         count_to_break = 0
         count_up_slope = 0
         test_gradient = False
         is_nan = False
         last_parameters = self.get_parameters()
-        if self.current_learning_rate <= lower_learning_rate:
-            self.current_learning_rate = 0.00001
+        # if self.current_learning_rate <= lower_learning_rate:
+        #     self.current_learning_rate = 0.00001
 
         for epoch in range(signal2model.number_of_epochs):
             t_epoch_1 = time.time()
+
+            if lower_learning_rate > self.current_learning_rate:
+                break
 
             if epoch % loss_interval == 0:
                 loss.append(self.calculate_loss(x_train, y_train))
@@ -199,8 +230,10 @@ class LibphysGRU:
                     relative_loss_gradient = (loss[-2] - loss[-1]) / (loss[-2] + loss[-1])
                     if math.isnan(loss[-1]):
                         if is_nan:
-                            self.restart_parameters()
-                            print("Restarting parameters due to NaN loss")
+                            print("ERROR NaN!!! RECOMPILE THIS ONE!!")
+                            return False
+                            # self.restart_parameters()
+                            # print("Restarting parameters due to NaN loss")
                         else:
                             loss.pop()
                             self.set_parameters(last_parameters)
@@ -268,6 +301,8 @@ class LibphysGRU:
                 t2 = time.time()
                 print("Epoch time: ~%d seconds" % int(t2 - t_epoch_1))
                 sys.stdout.flush()
+
+        return True
 
     def save(self, dir_name=None, file_tag=None):
         """

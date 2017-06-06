@@ -11,7 +11,7 @@ from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
 import seaborn
 
-signal_dim = 64
+signal_dim = 128
 hidden_dim = 256
 mini_batch_size = 10
 batch_size = 100

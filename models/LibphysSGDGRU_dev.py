@@ -43,8 +43,8 @@ class LibphysSGDGRU(LibphysGRU):
             x_e = E[:, x_t]
 
             def GRU(i, U, W, b, x_0, s_previous):
-                z = T.nnet.hard_sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b[i * 3])
-                r = T.nnet.hard_sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b[i * 3 + 1])
+                z = T.nnet.sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b[i * 3])
+                r = T.nnet.sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b[i * 3 + 1])
                 s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b[i * 3 + 2])
 
                 return (T.ones_like(z) - z) * s_candidate + z * s_previous
@@ -56,32 +56,58 @@ class LibphysSGDGRU(LibphysGRU):
             s2 = GRU(1, U, W, b, s1, s_prev2)
 
             # GRU Layer 3
-            s3 =GRU(2, U, W, b, s2, s_prev3)
+            s3 = GRU(2, U, W, b, s2, s_prev3)
 
             # Final output calculation
             o_t = T.nnet.softmax(V.dot(s3) + c)[0]
 
             return [o_t, s1, s2, s3]
 
+        N = T.iscalar('N')
+
+        def forward_prop_predict(n, x_t, s_prev1, s_prev2, s_prev3):
+            # Embedding layer
+            x_e = E[:, x_t]
+
+            def GRU(i, U, W, b, x_0, s_previous):
+                z = T.nnet.sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b[i * 3])
+                r = T.nnet.sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b[i * 3 + 1])
+                s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b[i * 3 + 2])
+
+                return (T.ones_like(z) - z) * s_candidate + z * s_previous
+
+            # GRU Layer 1
+            s1 = GRU(0, U, W, b, x_e, s_prev1)
+
+            # GRU Layer 2
+            s2 = GRU(1, U, W, b, s1, s_prev2)
+
+            # GRU Layer 3
+            s3 = GRU(2, U, W, b, s2, s_prev3)
+
+            # Final output calculation
+            y_hat = T.argmax(T.nnet.softmax(V.dot(s3) + c), axis=1)
+            return [y_hat, s1, s2, s3]
+
         [o, s1, s2, s3], updates = theano.scan(
             forward_prop_step,
             sequences=x,
             truncate_gradient=self.bptt_truncate,
             outputs_info=[None,
-                            dict(initial=T.zeros(self.hidden_dim)),
-                            dict(initial=T.zeros(self.hidden_dim)),
-                            dict(initial=T.zeros(self.hidden_dim))])
+                          dict(initial=T.zeros(self.hidden_dim)),
+                          dict(initial=T.zeros(self.hidden_dim)),
+                          dict(initial=T.zeros(self.hidden_dim))])
 
         self.predict = theano.function([x], [o], allow_input_downcast=True)
 
-        def sythesize(f):
-            return self.predict(f)
-
-        outputs_info = T.as_tensor_variable(np.asarray(0, seq.dtype))
-        synth, updates = theano.scan(
-            sythesize,
-            n_steps=1000,
-            outputs_info=[dict(initial=T.ones(2))])
+        outputs, updates = theano.scan(
+            forward_prop_predict,
+            sequences=T.arange(N),
+            n_steps=N,
+            outputs_info=[dict(initial=T.zeros(1, dtype='int')),
+                          dict(initial=T.zeros(self.hidden_dim)),
+                          dict(initial=T.zeros(self.hidden_dim)),
+                          dict(initial=T.zeros(self.hidden_dim))])
 
         prediction = T.argmax(o, axis=1)
         o_error = T.sum(T.nnet.categorical_crossentropy(o, y))
@@ -101,7 +127,7 @@ class LibphysSGDGRU(LibphysGRU):
         self.predict_class = theano.function([x], prediction, allow_input_downcast=True)
         self.ce_error = theano.function([x, y], cost, allow_input_downcast=True)
         self.bptt = theano.function([x, y], [dE, dU, dW, db, dV, dc], allow_input_downcast=True)
-        self.synthesize_signal = theano.function(outputs=synth, updates=updates, allow_input_downcast=True)
+        self.synthesize_signal = theano.function([N], outputs, allow_input_downcast=True)
         # SGD parameters
         learning_rate = T.scalar('learning_rate')
         decay = T.scalar('decay')
@@ -131,8 +157,6 @@ class LibphysSGDGRU(LibphysGRU):
                      (self.mc, mc)
                      ], allow_input_downcast=True)
 
-
-
     def calculate_total_loss(self, X, Y):
         return np.sum([self.ce_error(x, y) for x, y in zip(X, Y)])
 
@@ -152,9 +176,9 @@ class LibphysSGDGRU(LibphysGRU):
         print('Starting model generation')
         percent = 0
         for i in range(N):
-            if int(i*100/N)% 5 == 0:
+            if int(i * 100 / N) % 5 == 0:
                 print('.', end='')
-            elif int(i*100/N)% 20 == 0:
+            elif int(i * 100 / N) % 20 == 0:
                 percent += 0.2
                 print('{0}%'.format(percent))
             new_signal.append(self.generate_online_predicted_signal(starting_signal, window_seen_by_GRU_size))
@@ -171,9 +195,9 @@ class LibphysSGDGRU(LibphysGRU):
                 signal = new_signal[-window_seen_by_GRU_size:]
 
             [output] = self.predict(signal)
-            next_sample_probs = np.asarray(output, dtype=float)
-            sample = np.random.multinomial(1, next_sample_probs[-1] / np.sum(
-                next_sample_probs[-1]))
+            next_sample_probs = np.asarray(output[-1], dtype=float)
+            next_sample_probs = next_sample_probs / np.sum(next_sample_probs)
+            sample = np.random.choice(64, p=next_sample_probs)
             next_sample = np.argmax(sample)
         except:
             print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
