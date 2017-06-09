@@ -17,7 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
 
 GRU_DATA_DIRECTORY = "../data/trained/"
-SNR_DIRECTORY = "../data/validation/June_DNN_SNR_FANTASIA_1024_1024"
+SNR_DIRECTORY = "../data/validation/June_DNN_SNR_FANTASIA_1024_256"
 
 
 def load_test_data(filetag=None, dir_name=None):
@@ -608,13 +608,14 @@ def calculate_roc(loss_tensor, step = 0.001, last_index=1, first_index=0):
     N_Signals = np.shape(loss_tensor)[0]
     eer = np.zeros((2, N_Signals)) - 1
 
-    x = np.arange(first_index, last_index + step, step)
-    roc1 = np.zeros((2, len(x), np.shape(loss_tensor)[0]))
-    roc2 = np.zeros((2, len(x), np.shape(loss_tensor)[0]))
-    for i in range(len(x)):
+    thresholds = np.arange(first_index, last_index + step, step)
+    n_thresholds = len(thresholds)
+    roc1 = np.zeros((2, n_thresholds, np.shape(loss_tensor)[0]))
+    roc2 = np.zeros((2, n_thresholds, np.shape(loss_tensor)[0]))
+    for i in range(n_thresholds):
         if i % 100 == 0:
             print(".", end="")
-        scores = calculate_variables(loss_tensor, x[i])
+        scores = calculate_variables(loss_tensor, thresholds[i])
         for j in range(np.shape(loss_tensor)[0]):
             roc1[0, i, j] = scores[j]["FNR"]
             roc1[1, i, j] = scores[j]["FPR"]
@@ -630,6 +631,7 @@ def calculate_roc(loss_tensor, step = 0.001, last_index=1, first_index=0):
     remake = False
     candidate_index = 1
     print("end")
+    candidate_index = 0
     for j in range(np.shape(loss_tensor)[0]):
         # non_zeros = np.where(roc1[0, :, j] > 0)
         # non_zeros1 = np.where(roc2[0, :, j] > 0)
@@ -660,7 +662,7 @@ def calculate_roc(loss_tensor, step = 0.001, last_index=1, first_index=0):
         # roc1, roc2, scores, eer = calculate_roc(loss_tensor, step = step*0.01, last_index=x[maxi], first_index=x[mini])
 
 
-    return roc1, roc2, scores, eer
+    return roc1, roc2, scores, eer, thresholds[candidate_index]
 
 
 def plot_roc(roc1, roc2, eer, N_Signals=20):
@@ -959,14 +961,14 @@ def calculate_eers(batch_size, loss_tensor, iteration):
     if len(np.shape(temp_loss_tensor)) == 1 and temp_loss_tensor == -1:
         return
 
-    roc1, roc2, scores, eer_min = calculate_roc(temp_loss_tensor, step=0.001)
+    roc1, roc2, scores, eer_min, threshold = calculate_roc(temp_loss_tensor, step=0.001)
     # plot_roc(roc1, roc2, eer_min)
     print("EER MIN of batch_size = {0}, iteration = {1}: {2}".format(batch_size, iteration, np.min(eer_min[0])))
 
-    return [eer_min[0, :], iteration, batch_size, scores, roc1, roc2]
+    return [eer_min[0, :], iteration, batch_size, scores, roc1, roc2, threshold]
 
 def descompress_data(data):
-    EERs, iteration, batch_size, scores, roc1, roc2 = [], [], [], [], [], []
+    EERs, iteration, batch_size, scores, roc1, roc2, thresholds = [], [], [], [], [], []
     for line in data:
         EERs.append(line[0])
         iteration = line[1]
@@ -974,6 +976,7 @@ def descompress_data(data):
         scores.append(line[3])
         roc1.append(line[4])
         roc2.append(line[5])
+        thresholds.append(line[6])
 
     EERs = np.array(EERs).T
     new_data = {
@@ -983,9 +986,10 @@ def descompress_data(data):
         "scores": scores,
         "roc1": roc1,
         "roc2": roc2,
-        "best": np.argmin(np.mean(EERs, axis=0))
+        "best": np.argmin(np.mean(EERs, axis=0)),
+        "theshold": thresholds
     }
-    return EERs, iteration, batch_size, scores, roc1, roc2, new_data
+    return EERs, iteration, batch_size, scores, roc1, roc2, new_data, thresholds
 
 
 def process_alternate_eer(loss_tensor, iterations=10, savePdf=True, SNR=1, name="", batch_size=120, fs = 250):
@@ -1003,7 +1007,7 @@ def process_alternate_eer(loss_tensor, iterations=10, savePdf=True, SNR=1, name=
             np.random.seed(int(x))
         data = pool.starmap(calculate_eers, zip(batch_size_array, repeat(loss_tensor), repeat(iteration)))
         pool.close()
-        EER, epoch, batch_size, scores, roc1, roc2, save_data = descompress_data(data)
+        EER, epoch, batch_size, scores, roc1, roc2, save_data, thresholds = descompress_data(data)
         EERs[:, :, iteration] = np.array(EER)
         all_data.append(data)
         labels = ["ECG {0}".format(i) for i in range(1, N_Signals+1)]
@@ -1015,7 +1019,7 @@ def process_alternate_eer(loss_tensor, iterations=10, savePdf=True, SNR=1, name=
     labels = ["ITER {0}".format(i) for i in range(1, iterations + 1)]
     # plot_errs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations", "_SNR_ITER_{1}".format(SNR, name), savePdf=savePdf)
 
-    return np.mean(EERs, axis=0).T
+    return np.mean(EERs, axis=0).T, thresholds
 
 
 def process_eer(loss_tensor, iterations=10, savePdf=True, SNR=1, name=""):
@@ -1101,6 +1105,7 @@ def plot_errs(EERs, time, labels, title="", file="_iterations", savePdf=False, p
         os.makedirs(dir_name)
 
     pdf = PdfPages(dir_name + "/EER{0}.pdf".format(file))
+    plt.savefig(dir_name + "/EER{0}.eps", format='eps', dpi=1000)
     pdf.savefig(fig)
     plt.clf()
     pdf.close()
@@ -1116,8 +1121,9 @@ def plot_errs(EERs, time, labels, title="", file="_iterations", savePdf=False, p
 def process_all_eers(loss_quaternion, SNRs, iterations=1, loss_iteration=0, batch_size=120):
     mean_EERs = []
     for SNR, loss_tensor in zip(SNRs, loss_quaternion):
-        mean_EERs.append(process_alternate_eer(loss_tensor, iterations=iterations,
-                                               savePdf=False, SNR=SNR, name=str(loss_iteration)), batch_size=batch_size)
+        EERs, thresholds = process_alternate_eer(loss_tensor, iterations=iterations,
+                               savePdf=False, SNR=SNR, name=str(loss_iteration), batch_size=batch_size)
+        mean_EERs.append(EERs)
 
     np.savez("eers.npz", EERs=mean_EERs)
 
@@ -1169,15 +1175,15 @@ if __name__ == "__main__":
     noise_filename = dir_name + "/signals_without_noise_[{}].npz".format(signal_dim)
     npzfile = np.load(noise_filename)
     processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
-    processed_noise_array = processed_noise_array[np.where(np.logical_or(SNRs>10,SNRs==7))[0]]
+    processed_noise_array = processed_noise_array[np.where(np.logical_or(SNRs>9,SNRs==7))[0]]
 
     raw_filename = dir_name + "/processed_raw_signals_[{}].npz".format(signal_dim)
     # processed_clean_array, y_train = get_fantasia_dataset(signal_dim, range(1, 21)) #np.load("../data/signals_without_noise.npz")['signals_without_noise']
     # np.savez(raw_filename, processed_clean_array=processed_clean_array)
     processed_clean_array = np.load(raw_filename)["processed_clean_array"]
 
-    all_models_info = [db.ecg_1024_256_RAW, db.ecg_1024_256_SNR_12, db.ecg_1024_256_SNR_11, db.ecg_1024_256_SNR_7]#, db.ecg_SNR_9, db.ecg_SNR_8]
-    SNRs = ["RAW", "12", "11", "7"]#, "9", "8"]
+    all_models_info = [db.ecg_1024_256_RAW, db.ecg_1024_256_SNR_12, db.ecg_1024_256_SNR_11, db.ecg_1024_256_SNR_10, db.ecg_1024_256_SNR_7]#, db.ecg_SNR_9, db.ecg_SNR_8]
+    SNRs = ["RAW", "12", "11", "10", "7"]#, "9", "8"]
 
 
     loss_quaternion = []
@@ -1186,9 +1192,10 @@ if __name__ == "__main__":
                    processed_noise_array))
 
     iterations = 1
-    bs = 20
+    bs = 60
     all_EERs = []
     seconds = (np.arange(1, bs) * W * 0.33) / fs
+    indexes = list(range(1,6))+list(range(7,20))
     for iteration in range(iterations):
         filenames = [SNR_DIRECTORY + "/LOSS_FOR_SNR_{0}_iteration_{1}".format(SNR, iteration) for SNR in SNRs]
         loss_quaternion = calculate_all_loss_tensors(all_models_info, all_signals, filenames, N_Windows=N_Windows, W=W)
@@ -1199,7 +1206,7 @@ if __name__ == "__main__":
                 loss_quaternion.append(loss_tensor)
             # np.savez(filename, loss_tensor=npzfile["loss_tensor"])
 
-        EERs = process_all_eers(loss_quaternion, SNRs, iterations=1, loss_iteration=iteration, batch_size=bs)
+        EERs = process_all_eers(loss_quaternion[:, indexes, indexes, :], SNRs, iterations=1, loss_iteration=iteration, batch_size=bs)
         EERs = np.load("eers.npz")['EERs']
         # EERs = np.reshape(EERs, (np.shape(EERs)[0], np.shape(EERs)[2]))
         # EERs = np.mean(EERs, axis=0)

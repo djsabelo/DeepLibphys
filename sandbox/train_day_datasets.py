@@ -6,10 +6,10 @@ import DeepLibphys.utils.functions.database as db
 from DeepLibphys.utils.functions.common import get_signals_tests, segment_signal
 from DeepLibphys.utils.functions.signal2model import Signal2Model
 import matplotlib.pyplot as plt
-import DeepLibphys.models.LibphysMBGRU as GRU
+import DeepLibphys.models.LibphysSGDGRU as GRU
 
-signal_dim = 256
-hidden_dim = 256
+signal_dim = 64
+hidden_dim = 64
 mini_batch_size = 5
 signal_directory = 'DAY_HRV_[ALL.256]'
 
@@ -24,7 +24,7 @@ sizes = sizes[0] + sizes[1] + sizes[2] + sizes[3]
 window_size = np.min(sizes) - 1
 
 signal_directory = 'DAY_HRV_LOO_HF_['+str(hidden_dim)+'.'+str(window_size)+']'
-z = 1
+z = 0
 for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
     model_name = 'day_hrv_rr_{0}_{1}'.format(i, "-1")
     signal2model = Signal2Model(model_name, signal_directory,
@@ -34,8 +34,8 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
                                 mini_batch_size=mini_batch_size,
                                 learning_rate_val=0.05,
                                 save_interval=100000)
-    # model = GRU.LibphysMBGRU(signal2model)
-    # model.train_block(group_signals, signal2model, n_for_each=1)
+    model = GRU.LibphysMBGRU(signal2model)
+    model.train_block(group_signals, signal2model, n_for_each=1)
     for j in range(len(group_signals)):
         train_group = group_signals
         train_group.pop(j)
@@ -44,7 +44,7 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
         signal2model.model_name = model_name
         running_ok = False
         while not running_ok:
-            model = GRU.LibphysMBGRU(signal2model)
+            model = GRU.LibphysSGDGRU(signal2model)
             running_ok = model.train_block(train_group, signal2model, n_for_each=1)
 
 

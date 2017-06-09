@@ -30,8 +30,6 @@ class LibphysMBGRU(LibphysGRU):
             c = np.zeros(signal2model.signal_dim)
 
             super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
-            self.one_matrix = theano.shared(name='one',
-                                            value=np.ones((self.hidden_dim, self.mini_batch_size)).astype(theano.config.floatX))
 
             self.theano = {}
             self.__theano_build__()

@@ -22,9 +22,10 @@ TRAINED_DATA_DIRECTORY = '../data/trained/'
 COLORMAP_DIRECTORY = '../data/biosig_colormap/'
 RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
 FANTASIA_ECG = 'Fantasia/ECG/mat/'
+FANTASIA_RESP = 'Fantasia/RESP/mat/'
 
 class ModelType:
-    MINI_BATCH, SGD = range(2)
+    MINI_BATCH, SGD, CROSS_SGD, CROSS_MBSGD = range(4)
 
 """#####################################################################################################################
 ########################################################################################################################
@@ -113,28 +114,34 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
-def process_dnn_signal(signal, interval_size):
+def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60):
     # plt.plot(signal[1000:2000])
 
     signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
-    # plt.plot(signal[1000:2000])
+    # plt.figure(1)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
 
-    signal = remove_moving_avg(signal)
-    # plt.plot(signal[1000:2000])
-
+    signal = remove_moving_avg(signal, window_rmavg)
+    # plt.figure(2)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
 
     signals = remove_moving_std(signal)
 
     if len(np.shape(signal)) > 1:
         print("processing signals")
-        signalx = np.array([smooth(signal_) for signal_ in signals])
+        signalx = np.array([smooth(signal_, window_smooth) for signal_ in signals])
         # plt.plot(signalx[0][1000:2000])
+        # plt.show()
         return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
     else:
-        signal = smooth(signal)
-        ecg = descretitize_signal(signal, interval_size)
-        # plt(ecg[1000:2000])
+        signal = smooth(signal, window_smooth)
+        # plt.figure()
+        # plt.plot(signal[1000:2000])
         # plt.show()
+        ecg = descretitize_signal(signal, interval_size)
+
         return descretitize_signal(signal, interval_size)
 
 
@@ -217,12 +224,19 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_E
     for file_path in full_paths:
         signal = sio.loadmat(file_path)['val'][0]
         # signal = (signal - np.mean(signal)) / np.std(signal)
-        signals.append(process_dnn_signal(signal, signal_dim))
+        if dataset_dir.count(FANTASIA_RESP)>0:
+            signals.append(process_dnn_signal(signal, signal_dim, 100, 1000))
+        else:
+            signals.append(process_dnn_signal(signal, signal_dim))
+
 
         if peak_into_data:
             if peak_into_data == True:
                 peak_into_data = 1000
+            plt.figure(1)
             plt.plot(signal[1000:1000+peak_into_data])
+            plt.figure(2)
+            plt.plot(signals[-1][1000:1000+peak_into_data])
             plt.show()
 
     y_train = np.zeros(len(signals)).tolist()

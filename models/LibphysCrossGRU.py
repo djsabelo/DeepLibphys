@@ -23,17 +23,24 @@ class LibphysCrossGRU(LibphysGRU):
                               (self.dimensions, signal2model.hidden_dim, signal2model.signal_dim))
 
         U = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
-                              (2*self.cross_dimensions, signal2model.hidden_dim, signal2model.hidden_dim))
+                              (2*3*self.cross_dimensions, signal2model.hidden_dim, signal2model.hidden_dim))
         W = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
-                              (2*self.cross_dimensions, signal2model.hidden_dim, signal2model.hidden_dim))
+                              (2*3*self.cross_dimensions, signal2model.hidden_dim, signal2model.hidden_dim))
         V = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
                               (self.cross_dimensions, signal2model.signal_dim, signal2model.hidden_dim))
 
-        b = np.zeros((2*self.cross_dimensions, signal2model.hidden_dim, dimensions))
+        b = np.zeros((3*2*self.cross_dimensions, signal2model.hidden_dim))
         c = np.zeros((self.cross_dimensions, signal2model.signal_dim))
 
-        super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
+        super().__init__(signal2model, ModelType.CROSS_SGD, [E, U, W, V, b, c])
 
+        # signal = np.zeros((6, 2, 11))
+        # for i in range(np.shape(signal)[0]):
+        #     signal[i, 0, :] = np.array(np.random.randint(0, 4, 11), dtype=np.int32)
+        #     signal[i, 1, :] = np.array((2 + np.sin(np.arange(0, 11) * np.pi) * 2 / 6), dtype=np.int32)
+        #
+        # self.x = np.array(x_train, dtype=np.int32)
+        # self.y = np.array(y_train, dtype=np.int32)
         self.theano = {}
         self.__theano_build__()
 
@@ -41,13 +48,21 @@ class LibphysCrossGRU(LibphysGRU):
         parameters = [E, V, U, W, b, c] = self.E, self.V, self.U, self.W, self.b, self.c
         x = T.imatrix('x')
         y = T.imatrix('y')
+
+        # X_ = T.imatrix('X')
+        # Y_ = T.imatrix('Y')
+
+        # x.tag.test_value = self.x
+        # y.tag.test_value = self.y
+        # print(x.T.tag.test_value)
+        cross, dim, s_d, h_d = self.cross_dimensions, self.dimensions, self.signal_dim, self.hidden_dim
         def p(j, name):
             return printing.Print(name)(j)
 
         def GRU(i, x_0, s_previous):
-            z = T.nnet.sigmoid(U[i * 2 + 0].dot(x_0) + W[i * 2 + 0].dot(s_previous) + b[i * 2])
-            r = T.nnet.sigmoid(U[i * 2 + 1].dot(x_0) + W[i * 2 + 1].dot(s_previous) + b[i * 2 + 1])
-            s_candidate = T.tanh(U[i * 2 + 2].dot(x_0) + W[i * 2 + 2].dot(s_previous * r) + b[i * 2 + 2])
+            z = T.nnet.sigmoid(x_0.dot(U[i * 3 + 0]) + s_previous.dot(W[i * 3 + 0]) + b[i * 3])
+            r = T.nnet.sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b[i * 3 + 1])
+            s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b[i * 3 + 2])
 
             return (T.ones_like(z) - z) * s_candidate + z * s_previous
 
@@ -55,48 +70,33 @@ class LibphysCrossGRU(LibphysGRU):
             # Embedding layer
             x_e0 = E[0, :, x_t[0]]
             x_e1 = E[1, :, x_t[1]]
-            s_ = T.zeros((4, 2, 2, 3))
-            o_t = T.zeros((2, 2, 2, 5))
+            s_ = T.zeros_like(s_prev)
+            o_t = T.zeros((cross, s_d))
 
             # GRU BLOCK 1 [1 vs 1] #############
             # GRU Layer 1
-            fi = p(x_e0, "x_e0")
-            fu = GRU(0, fi, s_prev[0, 0, :])
-            xx = p(fu, "fu")
-            s_ = T.set_subtensor(s_[0, 0, :], xx)
+            # print(x_e0)
+            # print(s_prev)
+            s_ = T.set_subtensor(s_[:, 0], T.stack(
+                [GRU(0, x_e0, s_prev[0, 0]),            # GRU BLOCK 1 [1 vs 1] #############
+                 GRU(2, x_e1, s_prev[1, 0]),            # GRU BLOCK 2 [2 vs 1] #############
+                 GRU(4, x_e0, s_prev[2, 0]),            # GRU BLOCK 3 [1 vs 2]  #############
+                 GRU(6, x_e1, s_prev[3, 0]),            # GRU BLOCK 4 [2 vs 2]  #############
+                 ]), 0)
 
-            # GRU Layer 2
-            s_ = T.set_subtensor(s_[0, 1], GRU(1, s_[0, 0], s_prev[0, 1]))
-
-            # GRU BLOCK 2  [2 vs 1] #############
-            # GRU Layer 1
-            s_ = T.set_subtensor(s_[1, 0], GRU(2, x_e1, s_prev[1, 0]))
-
-            # GRU Layer 2
-            s_ = T.set_subtensor(s_[1, 1], GRU(3, s_[1, 0], s_prev[1, 1]))
-
-            # GRU BLOCK 3  [1 vs 2] #############
-            # GRU Layer 1
-            s_ = T.set_subtensor(s_[2, 0], GRU(4, x_e0, s_prev[2, 0]))
-
-            # GRU Layer 2
-            s_ = T.set_subtensor(s_[2, 1], GRU(5, s_[2, 0], s_prev[2, 1]))
-
-            # GRU BLOCK 4 [2 vs 2]  #############
-            # GRU Layer 1
-            s_ = T.set_subtensor(s_[3, 0], GRU(6, x_e1, s_prev[3, 0]))
-
-            # GRU Layer 2
-            s_ = T.set_subtensor(s_[3, 1], GRU(7, s_[3, 0], s_prev[3, 1]))
+            s_ = T.set_subtensor(s_[:, 1], T.stack(
+                [GRU(1, s_[0, 0], s_prev[0, 1]),    # GRU BLOCK 1 [1 vs 1] #############
+                 GRU(3, s_[1, 0], s_prev[1, 1]),    # GRU BLOCK 2 [2 vs 1] #############
+                 GRU(5, s_[2, 0], s_prev[2, 1]),    # GRU BLOCK 3 [1 vs 2]  #############
+                 GRU(7, s_[3, 0], s_prev[3, 1]),    # GRU BLOCK 4 [2 vs 2]  #############
+                 ]), 0)
 
             # Final output calculation
             # FIRST DIMENSION:
-            o_t = T.set_subtensor(o_t[0, 0], T.nnet.softmax((V[0].dot(s_[0, 1]) + c[1]).T).T)
-            o_t = T.set_subtensor(o_t[0, 1], T.nnet.softmax((V[1].dot(s_[1, 1]) + c[2]).T).T)
-
-            # SECOND DIMENSION:
-            o_t = T.set_subtensor(o_t[1, 0], T.nnet.softmax((V[2].dot(s_[2, 1]) + c[3]).T).T)
-            o_t = T.set_subtensor(o_t[1, 1], T.nnet.softmax((V[3].dot(s_[3, 1]) + c[4]).T).T)
+            o_t = T.stack(T.nnet.softmax((V[0].dot(s_[0, 1]) + c[0]))[0],
+                          T.nnet.softmax((V[1].dot(s_[1, 1]) + c[1]))[0],
+                          T.nnet.softmax((V[2].dot(s_[2, 1]) + c[2]))[0],
+                          T.nnet.softmax((V[3].dot(s_[3, 1]) + c[3]))[0])
 
             return [o_t, s_]
 
@@ -106,13 +106,8 @@ class LibphysCrossGRU(LibphysGRU):
             sequences=x.T,
             truncate_gradient=self.bptt_truncate,
             outputs_info=[None,
-                          dict(initial=T.zeros((4, 2, 2, 3)))])
+                          dict(initial=T.zeros((self.cross_dimensions, self.dimensions, self.hidden_dim)))])
 
-
-
-        prediction = T.argmax(o, axis=2)
-
-        # e = ((prediction - np.array([[y[0], y[0]], [y[1], y[1]]])) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1])
         cost_batch = self.calculate_ce_vector(o, y)
         # Total cost
         cost = self.calculate_error(o, y)
@@ -124,6 +119,7 @@ class LibphysCrossGRU(LibphysGRU):
         self.predict = theano.function([x], [o])
         # self.predict_class = theano.function([x, y], [prediction, e], allow_input_downcast=True)
         # self.error = theano.function([x, y], e)
+
         self.calculate_loss_vector = theano.function([x, y], cost_batch, allow_input_downcast=True)
         self.ce_error = theano.function([x, y], cost, allow_input_downcast=True)
         self.bptt = theano.function([x, y], derivatives, allow_input_downcast=True)
@@ -133,23 +129,17 @@ class LibphysCrossGRU(LibphysGRU):
         # rmsprop cache updates
         self.update_RMSPROP(cost, parameters, derivatives, x, y)
 
+    def p(self, j, name):
+        return printing.Print(name)(j)
+
     def calculate_error(self, O, Y):
         return T.sum(self.calculate_ce_vector(O, Y))
 
     def calculate_ce_vector(self, O, Y):
-        error = T.zeros((2, 2, 1))
-        for i in range(2):
-            for j in range(2):
-                for zi in range(2):
-                    error = T.set_subtensor(error[i, j], error[i,j]+T.nnet.categorical_crossentropy(O[i, j, zi, :], Y[j, :]))
-
-        return error
+        return [T.nnet.categorical_crossentropy(O[:, j], Y[int(j/self.dimensions)]) for j in range(self.cross_dimensions)]
 
     def calculate_total_loss(self, X, Y):
-        zi = 0
-        for x, y in zip(X, Y):
-                zi += self.ce_error(x, y)
-        return zi
+        return np.sum([self.calculate_loss_vector(xi, yi) for xi, yi in zip(X, Y)])
 
     def calculate_loss(self, X, Y):
         num_words = np.shape(X)[0] * np.shape(X)[1]

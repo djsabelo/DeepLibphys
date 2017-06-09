@@ -29,7 +29,7 @@ class LibphysSGDGRU(LibphysGRU):
         b = np.zeros((9, signal2model.hidden_dim))
         c = np.zeros(signal2model.signal_dim)
 
-        super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
+        super().__init__(signal2model, ModelType.SGD, [E, U, W, V, b, c])
         self.mini_batch_size = 1
         self.theano = {}
         self.__theano_build__()

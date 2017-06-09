@@ -200,7 +200,7 @@ class LibphysGRU:
     def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1):
         # print(x_train)
         # print(y_train)
-        loss = [self.calculate_loss(x_train, y_train)]
+        loss = [self.calculate_total_loss(x_train, y_train)]
         lower_error_threshold, higher_error_threshold = [10**(-5), 1]
         lower_error = 10**(-3)
         lower_learning_rate = 10**(-5)
@@ -219,7 +219,7 @@ class LibphysGRU:
                 break
 
             if epoch % loss_interval == 0:
-                loss.append(self.calculate_loss(x_train, y_train))
+                loss.append(self.calculate_total_loss(x_train, y_train))
                 if epoch == 0:
                     print("Time to calculate loss: {0} ".format(time.time() - t_epoch_1))
 
@@ -286,8 +286,23 @@ class LibphysGRU:
             for i in range(0, len(indexes), self.mini_batch_size):
                 # One SGD step
                 ind = indexes[i:i + self.mini_batch_size]
-                self.sgd_step(x_train[ind, :], y_train[ind, :], self.current_learning_rate, signal2model.decay)
-
+                if self.model_type == ModelType.SGD:
+                    N = np.shape(x_train)[-1]
+                    self.sgd_step(np.reshape(x_train[i, :], (N)), np.reshape(y_train[i, :],(N)),
+                                  self.current_learning_rate, signal2model.decay)
+                elif self.model_type == ModelType.CROSS_SGD:
+                    N = np.shape(x_train)[-2]
+                    M = np.shape(x_train)[-1]
+                    self.sgd_step(np.reshape(x_train[i], (N, M)), np.reshape(y_train[i], (N, M)),
+                                  self.current_learning_rate, signal2model.decay)
+                elif self.model_type == ModelType.CROSS_MBSGD:
+                    N = np.shape(x_train)[-2]
+                    M = np.shape(x_train)[-1]
+                    self.sgd_step(np.reshape(x_train[ind], (self.mini_batch_size, N, M)),
+                                  np.reshape(y_train[ind], (self.mini_batch_size, N, M)),
+                                  self.current_learning_rate, signal2model.decay)
+                else:
+                    self.sgd_step(x_train[ind, :], y_train[ind, :], self.current_learning_rate, signal2model.decay)
 
             if epoch % 10 == 0 or epoch == 0:
                 t2 = time.time()
