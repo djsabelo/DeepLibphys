@@ -82,8 +82,8 @@ npzfile = np.load(noise_filename)
 processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 
 # plt.show()
-for SNR, signals_with_noise in zip(SNRs[3:], processed_noise_array[3:]):
-    for i, signal in zip(range(len(signals_with_noise)),signals_with_noise):
+for SNR, signals_with_noise in zip(SNRs[SNRs==10], processed_noise_array[SNRs==10]):
+    for i, signal in zip(range(15,len(signals_with_noise)),signals_with_noise[15:]):
         name = 'ecg_SNR_' + str(SNR) + str(i+1)
         signal2model = Signal2Model(name, signal_directory, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size)
