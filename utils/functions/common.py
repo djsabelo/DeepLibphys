@@ -134,18 +134,18 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60)
         signalx = np.array([smooth(signal_, window_smooth) for signal_ in signals])
         # plt.plot(signalx[0][1000:2000])
         # plt.show()
-        return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
+        return np.array([quantitize_signal(signal_, interval_size) for signal_ in signalx])
     else:
         signal = smooth(signal, window_smooth)
         # plt.figure()
         # plt.plot(signal[1000:2000])
         # plt.show()
-        ecg = descretitize_signal(signal, interval_size)
+        ecg = quantitize_signal(signal, interval_size)
 
-        return descretitize_signal(signal, interval_size)
+        return quantitize_signal(signal, interval_size)
 
 
-def descretitize_signal(signal, interval_size, confidence = 0.001):
+def quantitize_signal(signal, interval_size, confidence = 0.001):
     n, bins, patches = plt.hist(signal, 10000)
     distribution_sum = np.cumsum(n)
     MIN = bins[np.where(distribution_sum <= confidence * np.sum(n))[0][-1]]
