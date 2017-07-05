@@ -19,10 +19,7 @@ References:
 
 """
 
-from __future__ import print_function
-
 __docformat__ = 'restructedtext en'
-
 
 import os
 import sys
@@ -33,14 +30,13 @@ import numpy
 import theano
 import theano.tensor as T
 
-
 from logistic_sgd import LogisticRegression, load_data
 
 
 # start-snippet-1
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,
-                 activation=T.tanh):
+    def __init__(self, rng: object, input: object, n_in: object, n_out: object, W: object = None, b: object = None,
+                 activation: object = T.tanh) -> object:
         """
         Typical hidden layer of a MLP: units are fully-connected and have
         sigmoidal activation function. Weight matrix W is of shape (n_in,n_out)
@@ -90,7 +86,7 @@ class HiddenLayer(object):
                 ),
                 dtype=theano.config.floatX
             )
-            if activation == theano.tensor.nnet.sigmoid:
+            if activation == T.nnet.sigmoid or activation == T.nnet.softmax_op:
                 W_values *= 4
 
             W = theano.shared(value=W_values, name='W', borrow=True)
@@ -155,7 +151,7 @@ class MLP(object):
             input=input,
             n_in=n_in,
             n_out=n_hidden,
-            activation=T.tanh
+            activation=T.tanh  # was T.tanh
         )
 
         # The logistic regression layer gets as input the hidden units
@@ -247,7 +243,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     index = T.lscalar()  # index to a [mini]batch
     x = T.matrix('x')  # the data is presented as rasterized images
     y = T.ivector('y')  # the labels are presented as 1D vector of
-                        # [int] labels
+    # [int] labels
 
     rng = numpy.random.RandomState(1234)
 
@@ -306,7 +302,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     updates = [
         (param, param - learning_rate * gparam)
         for param, gparam in zip(classifier.params, gparams)
-    ]
+        ]
 
     # compiling a Theano function `train_model` that returns the cost, but
     # in the same time updates the parameter of the model based on the rules
@@ -330,14 +326,14 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # early-stopping parameters
     patience = 10000  # look as this many examples regardless
     patience_increase = 2  # wait this much longer when a new best is
-                           # found
+    # found
     improvement_threshold = 0.995  # a relative improvement of this much is
-                                   # considered significant
+    # considered significant
     validation_frequency = min(n_train_batches, patience // 2)
-                                  # go through this many
-                                  # minibatche before checking the network
-                                  # on the validation set; in this case we
-                                  # check every epoch
+    # go through this many
+    # minibatche before checking the network
+    # on the validation set; in this case we
+    # check every epoch
 
     best_validation_loss = numpy.inf
     best_iter = 0
@@ -373,10 +369,10 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
                 # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
-                    #improve patience if loss improvement is good enough
+                    # improve patience if loss improvement is good enough
                     if (
-                        this_validation_loss < best_validation_loss *
-                        improvement_threshold
+                                this_validation_loss < best_validation_loss *
+                                improvement_threshold
                     ):
                         patience = max(patience, iter * patience_increase)
 

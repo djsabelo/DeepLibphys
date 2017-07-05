@@ -1060,6 +1060,7 @@ def segment_signal(signal, W, overlap=0.5, N_Windows=None, start_index=0):
 
     return segment_matrix, y, N_Windows, end_indexes[-1]
 
+
 def segment_matrix(signal, W, overlap=0.5, N_Windows=None, start_index=0):
     """
     This method returns a tensor with window segments with a overlap fraction

@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-datasets_dir = '/media/datasets/'
+datasets_dir = os.getcwd()
 
 def one_hot(x,n):
 	if type(x) == list:

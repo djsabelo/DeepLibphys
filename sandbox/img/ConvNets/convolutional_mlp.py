@@ -101,14 +101,16 @@ class LeNetConvPoolLayer(object):
         pooled_out = pool.pool_2d(
             input=conv_out,
             ds=poolsize,
-            ignore_border=True
+            ignore_border=True,
+            mode='average_inc_pad'
         )
 
         # add the bias term. Since the bias is a vector (1D array), we first
         # reshape it to a tensor of shape (1, n_filters, 1, 1). Each bias will
         # thus be broadcasted across mini-batches and feature map
         # width & height
-        self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+
+        self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x')) # was T.tanh
 
         # store parameters of this layer
         self.params = [self.W, self.b]
@@ -117,7 +119,7 @@ class LeNetConvPoolLayer(object):
         self.input = input
 
 
-def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
+def evaluate_lenet5(learning_rate=0.001, n_epochs=1000,
                     dataset='mnist.pkl.gz',
                     nkerns=[20, 50], batch_size=500):
     """ Demonstrates lenet on MNIST dataset
@@ -206,7 +208,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
         input=layer2_input,
         n_in=nkerns[1] * 4 * 4,
         n_out=500,
-        activation=T.tanh
+        activation=T.tanh #try T.nnet.softmax_op
     )
 
     # classify the values of the fully-connected sigmoidal layer

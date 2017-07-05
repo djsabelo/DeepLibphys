@@ -4,7 +4,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 from load import mnist
 from theano.tensor.nnet.conv import conv2d
-from theano.tensor.signal.downsample import max_pool_2d
+from theano.tensor.signal.pool import pool_2d
 
 srng = RandomStreams()
 
@@ -39,18 +39,65 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
         updates.append((acc, acc_new))
         updates.append((p, p - lr * g))
     return updates
+def SGD(cost, params, lr=0.1):
+    grads = T.grad(cost=cost, wrt=params)
+    updates = []
+    #noise = theano.shared(np.float32(np.random.randn() * 0.001), 'noise')
+    for p, g in zip(params, grads):
+        #acc = theano.shared(p.get_value() * 0.)
+        #acc_new = rho * acc + (1 - rho) * g ** 2
+        #gradient_scaling = T.sqrt(acc_new + epsilon)
+        #g = g / gradient_scaling
+        #updates.append((acc, acc_new))
+        updates.append((p, p - lr * g))
+    return updates
+'''0.9669
+0.9774
+0.9857
+0.9864
+0.9866
+0.9882
+0.9875
+0.9891
+0.9861
+0.9855
+0.9884
+0.9884
+0.9853
+0.9896
+0.9874'''
+def Adam(cost, params, lr=0.001, beta1=0.9, beta2=.999, epsilon=1e-6):
+    grads = T.grad(cost=cost, wrt=params)
+    #noise = theano.shared(np.float32(np.random.randn() * 0.001), 'noise')
+    updates = []
+    i = theano.shared(floatX(0.))
+    i_t = i + 1
+    fix1 = 1. - (1. - beta1) ** i_t
+    fix2 = 1. - (1. - beta2) ** i_t
+    lr_t = lr * (T.sqrt(fix2) / fix1)
+    for p, g in zip(params, grads):
+        m = theano.shared(p.get_value() * 0.)
+        v = theano.shared(p.get_value() * 0.)
+        m_t = beta1 * g + (1-beta1) * m
+        v_t = beta2 * T.sqr(g) + (1 - beta2) * v
+        gradient_scaling = T.sqrt(v_t) + epsilon
+        g_t = m_t / gradient_scaling
+        updates.append((m, m_t))
+        updates.append((v, v_t))
+        updates.append((p, p - lr_t * g_t))
+    return updates
 
 def model(X, w, w2, w3, w4, p_drop_conv, p_drop_hidden):
     l1a = rectify(conv2d(X, w, border_mode='full'))
-    l1 = max_pool_2d(l1a, (2, 2))
+    l1 = pool_2d(l1a, (2, 2))
     l1 = dropout(l1, p_drop_conv)
 
     l2a = rectify(conv2d(l1, w2))
-    l2 = max_pool_2d(l2a, (2, 2))
+    l2 = pool_2d(l2a, (2, 2))
     l2 = dropout(l2, p_drop_conv)
 
     l3a = rectify(conv2d(l2, w3))
-    l3b = max_pool_2d(l3a, (2, 2))
+    l3b = pool_2d(l3a, (2, 2))
     l3 = T.flatten(l3b, outdim=2)
     l3 = dropout(l3, p_drop_conv)
 
@@ -89,4 +136,4 @@ predict = theano.function(inputs=[X], outputs=y_x, allow_input_downcast=True)
 for i in range(100):
     for start, end in zip(range(0, len(trX), 128), range(128, len(trX), 128)):
         cost = train(trX[start:end], trY[start:end])
-    print np.mean(np.argmax(teY, axis=1) == predict(teX))
+    print(np.mean(np.argmax(teY, axis=1) == predict(teX)))
