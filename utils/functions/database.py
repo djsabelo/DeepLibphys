@@ -273,6 +273,16 @@ ecg_SNR_10 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_10"+str(i),
                         directory="CLEAN_ECG_BIOMETRY[256.256]")
               for i in range(1, 21)]
 
+cybhi_256 = [ModelInfo(Hd=256, dataset_name="ecg_cybhi_"+str(i),
+                        name="CYBHi "+str(i+1),
+                        directory="ECG_BIOMETRY[112.256]")
+              for i in range(0, 58)]
+
+cybhi_1024 = [ModelInfo(Sd=256, Hd=256, dataset_name="ecg_cybhi_"+str(i),
+                        name="CYBHi "+str(i+1),
+                        directory="ECG_BIOMETRY[112.1024]")
+              for i in range(0, 15)]
+
 web_group_x_models = [ModelInfo(Hd=256, dataset_name=("web_group_x["+str(i)+"]"),
                         name="WEB GROUP X "+str(i),
                         directory="WEB_[64.256]")

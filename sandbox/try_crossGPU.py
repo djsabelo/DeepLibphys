@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.utils.functions.common import *
-import DeepLibphys.models.LibphysCrossMBGRU as GRU
+import DeepLibphys.models.LibphysCrossGRU as GRU
 import theano
 
 theano.config.optimizer='fast_compile'
@@ -31,10 +31,11 @@ if __name__ == "__main__":
 
     # load_data()
     signal = np.load('../data/Cross_GRU/test_signal.npz')['signal']
-    sig2mod = Signal2Model("test_x", "[TEST_MB_CROSS_GRU]", signal_dim=signal_dim, window_size=window_size,
+    sig2mod = Signal2Model("test_x", "[TEST_CROSS_GRU]", signal_dim=signal_dim, window_size=window_size,
                            hidden_dim=hidden_dim, mini_batch_size=8)
-    model = GRU.LibphysCrossMBGRU(sig2mod)
-    model.load(model.get_file_tag(epoch=1000))
+    model = GRU.LibphysCrossGRU(sig2mod)
+    model.load(dir_name="[TEST_CROSS_GRU]", file_tag=model.get_file_tag(epoch=1000))
     print("in")
     model.train_model(np.array(signal[:32, :, :-1], dtype=np.int32), np.array(signal[:32, :, 1:], dtype=np.int32), sig2mod)
+    model.save("[TEST_CROSS_GRU]", model.get_file_tag(-5, -5))
 

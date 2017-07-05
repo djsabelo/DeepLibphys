@@ -266,7 +266,57 @@ def get_fantasia_full_paths(dataset_dir, example_index_array):
 
     return full_paths
 
-def get_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
+
+def get_cyb_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
+    full_paths = os.listdir(dataset_dir)
+    train_signals = []
+    test_signals = []
+    fs = 1000
+    train_names = []
+    train_dates = []
+    test_dates = []
+    test_names = []
+    for file_path in full_paths:
+        if file_path[-3:] == "txt":
+            file = dataset_dir+'/'+file_path
+            print("Processing file: {0}".format(file))
+            try:
+                filename = file_path.split('/')[-1].split('.')[0]
+                name = filename[9:-6]
+                date = filename[:8]
+
+
+                signal = np.loadtxt(file)
+                N = len(signal)
+                time = len(signal)/fs
+                # iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
+                # t = np.arange(0, time-1/500, 1/500)
+                # signal = iter_(t)
+                signal = sig.decimate(signal, 4)
+                signal = process_dnn_signal(signal, signal_dim)
+                if train_names.count(name) == 0:
+                    train_signals.append(signal)
+                    train_names.append(name)
+                    train_dates.append(date)
+                else:
+                    test_signals.append(signal)
+                    test_names.append(name)
+                    test_dates.append(date)
+                #
+                #         if peak_into_data:
+                if peak_into_data == True:
+                    peak_into_data = 1000
+                    plt.plot(signal[1000:1000+peak_into_data])
+                    plt.show()
+                print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
+            except ValueError:
+                print("Error")
+                pass
+
+    return train_dates, train_names, train_signals, test_dates, test_names, test_signals
+
+
+def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
     full_paths = os.listdir(dataset_dir)
     signals = []
     fs = 360
@@ -853,18 +903,45 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
                           cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
     # plt.tight_layout()
 
+    N = np.shape(confusion_matrix)[0]
+    TP = 0
+    TN = 0
+    FP = 0
+    FN = 0
+    TOTAL = 0
+    for line, i in zip(confusion_matrix, range(N)):
+        TP += line[i]
+        FP += np.sum(confusion_matrix[np.arange(N) != i, i])
+        TN += np.sum(confusion_matrix[np.arange(N) != i, np.arange(N) != i])
+        FN += np.sum(line) - line[i]
+        TOTAL += np.sum(confusion_matrix)
 
-    acc = 100*np.sum(np.diag(confusion_matrix))/np.sum(confusion_matrix)
+    ACC = 100 * (TP + TN) / TOTAL
+    # acc = 100 * np.sum(np.diag(confusion_matrix))/np.sum(confusion_matrix)
+    sens = 100 * TN / (TN + FN)
+    spec = 100 * TN / (TN + FP)
 
     fig, ax = plt.subplots()
     ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
                                        norm, N_Windows)
 
-    ax.annotate('Accurancy of {0:.1f}%'.format(acc),
+    ax.annotate('Accurancy of {0:.1f}%'.format(ACC),
+                xy=(0.5, 0), xytext=(0, 60),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=15, ha='center', va='bottom')
+
+    ax.annotate('Specificity of {0:.1f}%'.format(spec),
+                xy=(0.5, 0), xytext=(0, 35),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=15, ha='center', va='bottom')
+
+    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
                 xy=(0.5, 0), xytext=(0, 10),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
-                size=30, ha='center', va='bottom')
+                size=15, ha='center', va='bottom')
 
     # ax = prepare_confusion_pie(ax, confusion_matrix)
     mng = plt.get_current_fig_manager()
@@ -889,17 +966,22 @@ def plot_confusion_matrix_with_pie(confusion_matrix, labels_pred, labels_true, r
 
 def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap,
                                   cmap_text, no_numbers, norm, N_Windows):
+
+    if norm:
+        for i in range(np.shape(confusion_matrix)[0]):
+            confusion_matrix[i] = confusion_matrix[i] / np.sum(confusion_matrix[i])
+
     # plt.tight_layout()
-    if len(labels_pred) == 2:
-        labels_pred = ["", labels_pred[0], "", labels_pred[1]]
-    else:
-        labels_pred = np.array([["", label] for label in labels_pred])
-        labels_pred = labels_pred.flatten()
-    if len(labels_true) == 2:
-        labels_true = ["", labels_true[0], "", labels_true[1]]
-    else:
-        labels_true = np.array([["", label] for label in labels_true])
-        labels_true = labels_true.flatten()
+    # if len(labels_pred) == 2:
+    #     labels_pred = ["", labels_pred[0], "", labels_pred[1]]
+    # else:
+    #     labels_pred = np.array([["", label] for label in labels_pred])
+    #     labels_pred = labels_pred.flatten()
+    # if len(labels_true) == 2:
+    #     labels_true = ["", labels_true[0], "", labels_true[1]]
+    # else:
+    #     labels_true = np.array([["", label] for label in labels_true])
+    #     labels_true = labels_true.flatten()
 
     if norm:
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap, vmin=0, vmax=1)

@@ -725,8 +725,8 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
     plt.title(title)
 
     if savePdf:
-        print("Saving img/EER{0}.pdf".format(file))
-        pdf = PdfPages("img/EER{0}.pdf".format(file))
+        print("Saving img_2/EER{0}.pdf".format(file))
+        pdf = PdfPages("img_2/EER{0}.pdf".format(file))
         pdf.savefig(fig)
         plt.clf()
         pdf.close()
