@@ -93,12 +93,11 @@ if __name__ == "__main__":
     npzfile = np.load(noise_filename)
     processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 
+    SNRs = SNRs[np.logical_or(SNRs==9, SNRs==6)]
     # plt.show()
     for SNR, signals_with_noise in zip(SNRs, processed_noise_array):
         for i, signal in zip(range(len(signals_with_noise)), signals_with_noise):
-            if SNR == 12 and i < 7 :
-                pass
-            elif SNR < 8:
+            if i > 9:
                 name = 'ecg_' + str(i+1) + '_SNR_' + str(SNR)
                 signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                             batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size)

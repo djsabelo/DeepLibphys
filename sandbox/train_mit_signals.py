@@ -3,18 +3,18 @@ from DeepLibphys.utils.functions.signal2model import Signal2Model
 import DeepLibphys.models.LibphysMBGRU as GRU
 
 mit_dir = RAW_SIGNAL_DIRECTORY + 'MIT-Arrythmia'
-processed_data_path = '../data/biometry_mit[64].npz'
-signals = get_dataset_files(64, val='val', row=0, dataset_dir=mit_dir, peak_into_data=False)
-np.savez(processed_data_path, signals=signals)
+processed_data_path = '../data/biometry_mit[256].npz'
 
-signal_dim = 64
+signal_dim = 256
 hidden_dim = 256
 mini_batch_size = 16
 batch_size = 128
-window_size = 256
+window_size = 1024
 save_interval = 1000
 signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
+signals = get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=mit_dir, peak_into_data=False)
+np.savez(processed_data_path, signals=signals)
 
 signals = np.load(processed_data_path)['signals']
 z = 0

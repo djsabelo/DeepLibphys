@@ -34,8 +34,12 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
                                 mini_batch_size=mini_batch_size,
                                 learning_rate_val=0.05,
                                 save_interval=100000)
-    model = GRU.LibphysMBGRU(signal2model)
-    model.train_block(group_signals, signal2model, n_for_each=1)
+
+    if i == 0:
+        pass
+    else:
+        model = GRU.LibphysSGDGRU(signal2model)
+        model.train_block(group_signals, signal2model, n_for_each=1)
     for j in range(len(group_signals)):
         train_group = group_signals
         train_group.pop(j)

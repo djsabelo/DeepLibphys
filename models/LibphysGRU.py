@@ -105,7 +105,7 @@ class LibphysGRU:
                      ], allow_input_downcast=True)
 
     def train_block(self, signals, signal2model, signal_indexes=None, n_for_each=12, overlap=0.33, random_training=True,
-                    start_index=0, track_loss=False, loss_interval=1):
+                    start_index=0, track_loss=False, loss_interval=1, train_ratio=0.33):
         """
         This method embraces several datasets (or one) according to a number of records for each
 
@@ -153,12 +153,18 @@ class LibphysGRU:
                                                                                 overlap=overlap, start_index=start_index)
                 Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
                                                                                 overlap=overlap, start_index=start_index)
-                last_training_index = int(n_windows * 0.33)
+
+                n_for_each = n_for_each if n_for_each < np.shape(X_windows)[0] else np.shape(X_windows)[0]
+                n_for_each = n_for_each if n_for_each % self.mini_batch_size == 0 \
+                    else self.mini_batch_size * int(n_for_each/self.mini_batch_size)
+
+                last_training_index = int(n_windows * train_ratio)
                 # List of the windows to be inserted in the dataset
                 if random_training:
                     window_indexes = np.random.permutation(last_training_index)  # randomly select windows
                 else:
                     window_indexes = list(range((n_windows))) # first windows are selected
+
 
                 # Insertion of the windows of this signal in the general dataset
                 if len(x_train) == 0:
@@ -166,17 +172,18 @@ class LibphysGRU:
                     x_train = X_windows[window_indexes[0:n_for_each], :]
                     y_train = Y_windows[window_indexes[0:n_for_each], :]
 
-                    # The rest is for test data
-                    x_test = X_windows[last_training_index:, :]
-                    y_test = Y_windows[last_training_index:, :]
+
+                    # # The rest is for test data
+                    # x_test = X_windows[last_training_index:, :]
+                    # y_test = Y_windows[last_training_index:, :]
                 else:
                     x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
                     y_train = np.append(y_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
-                    x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
-                    y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
+                    # x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
+                    # y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
 
                 # Save test data
-                self.save_test_data(signal2model.signal_directory, [x_test, y_test])
+                # self.save_test_data(signal2model.signal_directory, [x_test, y_test])
 
         # Start time recording
         self.start_time = time.time()
@@ -194,8 +201,15 @@ class LibphysGRU:
         else:
             return False
 
-    def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1):
-        return self.train_block([X], signal2model, [0], signal2model.batch_size, overlap, random_training, start_index, loss_interval)
+    def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1, train_ratio=0.33):
+        return self.train_block([X],
+                                signal2model, [0],
+                                signal2model.batch_size,
+                                overlap,
+                                random_training,
+                                start_index,
+                                loss_interval,
+                                train_ratio=train_ratio)
 
     def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1):
         # print(x_train)

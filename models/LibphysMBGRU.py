@@ -123,13 +123,13 @@ class LibphysMBGRU(LibphysGRU):
         return T.mean(T.power(Pred.T-Y, 2), axis=1)
 
     def calculate_total_loss(self, X, Y):
+        num_words = float(np.shape(X)[0] * np.shape(X)[1])
         return np.sum([self.ce_error(X[i:i + self.mini_batch_size, :], Y[i:i + self.mini_batch_size, :])
-                       for i in range(0, np.shape(X)[0], self.mini_batch_size)])
+                       for i in range(0, np.shape(X)[0], self.mini_batch_size)]) / num_words
 
 
     def calculate_loss(self, X, Y):
-        num_words = float(np.shape(X)[0] * np.shape(X)[1])
-        return self.calculate_total_loss(X, Y) / num_words
+        return self.calculate_total_loss(X, Y)
 
     def generate_predicted_signal(self, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
         signal2model = Signal2Model(self.model_name, self.get_directory_tag(), signal_dim=self.signal_dim,
