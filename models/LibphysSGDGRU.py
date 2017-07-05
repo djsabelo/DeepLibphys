@@ -6,6 +6,8 @@ from DeepLibphys.models.LibphysGRU import LibphysGRU
 import theano
 import theano.tensor as T
 from theano import printing
+from scipy.stats import norm
+import matplotlib.pyplot as plt
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 
@@ -27,7 +29,7 @@ class LibphysSGDGRU(LibphysGRU):
         b = np.zeros((9, signal2model.hidden_dim))
         c = np.zeros(signal2model.signal_dim)
 
-        super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
+        super().__init__(signal2model, ModelType.SGD, [E, U, W, V, b, c])
         self.mini_batch_size = 1
         self.theano = {}
         self.__theano_build__()
@@ -148,7 +150,7 @@ class LibphysSGDGRU(LibphysGRU):
 
         return new_signal[1:]
 
-    def generate_online_predicted_signal(self, starting_signal, window_seen_by_GRU_size):
+    def generate_online_predicted_signal(self, starting_signal, window_seen_by_GRU_size, uncertaintly=0.05):
         new_signal = starting_signal
         next_sample = None
         try:
@@ -159,11 +161,22 @@ class LibphysSGDGRU(LibphysGRU):
 
             [output] = self.predict(signal)
             next_sample_probs = np.asarray(output, dtype=float)
-            sample = np.random.multinomial(1, next_sample_probs[-1] / np.sum(
-                next_sample_probs[-1]))
-            next_sample = np.argmax(sample)
+            next_sample_probs = next_sample_probs[-1] / np.sum(next_sample_probs[-1])
+
+            means = np.where(next_sample_probs > 0.01)[0]
+            xxx = np.zeros(64)
+            for mean_ in means:
+                xxx += norm.pdf(np.arange(64), mean_, uncertaintly) * next_sample_probs[mean_]
+
+            xxx = xxx / np.sum(xxx)
+            # next_sample_probs = np.random.multinomial(1, next_sample_probs)
+            next_sample = np.random.choice(64, p=xxx)
+            # next_sample = np.argmax(sample)
         except:
             print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
             next_sample = 0
-
+        # plt.plot(np.arange(len(next_sample_probs)), next_sample_probs, 'k-', next_sample, xxx[next_sample], 'ro')
+        # plt.plot(np.arange(len(xxx)), xxx, 'g-')
+        # print(next_sample)
+        # plt.show()
         return next_sample

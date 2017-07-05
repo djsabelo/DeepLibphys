@@ -196,6 +196,53 @@ ecg_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
                         directory="CLEAN_ECG_BIOMETRY[128.256]")
               for i in range(0,20)]
 
+
+ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
+                        name="ECG "+str(i+1),
+                        directory="CLEAN_ECG_BIOMETRY[256.1024]")
+              for i in range(0,20)]
+
+ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="clean_ecg"+str(i+1),
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_12 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_12",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_11 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_11",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_10 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_10",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_9 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_9",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_8 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_8",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_7 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_7",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+ecg_1024_256_SNR_6 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_6",
+                        name="ECG "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 20)]
+
+
 ecg_noisy_models = [ModelInfo(Hd=256, dataset_name="noisy_ecg_"+str(i),
                         name="ECG "+str(i),
                         directory="NOISE_ECGs_[150.256]")
@@ -212,6 +259,16 @@ ecg_SNR_9 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_9"+str(i),
               for i in range(1, 21)]
 
 ecg_SNR_8 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_8"+str(i),
+                        name="ECG "+str(i),
+                        directory="CLEAN_ECG_BIOMETRY[256.256]")
+              for i in range(1, 21)]
+
+ecg_SNR_11 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_11"+str(i),
+                        name="ECG "+str(i),
+                        directory="CLEAN_ECG_BIOMETRY[256.256]")
+              for i in range(1, 21)]
+
+ecg_SNR_10 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_10"+str(i),
                         name="ECG "+str(i),
                         directory="CLEAN_ECG_BIOMETRY[256.256]")
               for i in range(1, 21)]
@@ -245,9 +302,9 @@ gsr_models = [ModelInfo(dataset_name="driver_gsr"+str(i),
                         directory="DRIVER_GSR_[256.256]")
               for i in range(14)]
 
-rr_models = [ModelInfo(dataset_name='day_rr_10Hz_{0}'.format(i+1),
-                        name="RR "+str(i+1),
-                        directory="DAY_RR_[128.64]")
+rr_models = [ModelInfo(dataset_name='day_hrv_rr_{0}'.format(i),
+                        name="GROUP "+str(i),
+                        directory='DAY_HRV_HF_[256.2397]')
               for i in range(4)]
 
 rr_256_models = [ModelInfo(dataset_name='day_rr_10Hz_{0}'.format(i+1),

@@ -12,81 +12,98 @@ from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
 import seaborn
 
-signal_dim = 64
-hidden_dim = 256
-mini_batch_size = 16
-batch_size = 256
-window_size = 256
-signal_directory = 'CLEAN_ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-# get noise from signals:
-#
-# signals_without_noise = []
-# signals_noise = []
-# SNR = []
-# full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1,21)))
-# for file_path in full_paths[]:
-#     # try:
-#         print("Pre-processing signal - " + file_path)
-#         signal = sio.loadmat(file_path)['val'][0][:1256]
-#         # plt.plot(signal)
-#         processed = process_dnn_signal(signal, signal_dim)
-#         signals_without_noise.append(processed)
-#         # plt.plot(processed)
-#         # plt.show()
-#         # plt.plot(signal[1000:5000])
-#         # fig, ax = plt.subplots()
-#         # # signalx = smooth(remove_moving_std(remove_moving_avg((signal - np.mean(signal)) / np.std(signal))))
-#         # # signalx -= np.min(signalx)
-#         # # signalx /= np.max(signalx)
-#         # # signalx *= 64
-#         #
-#         # major_ticks = np.arange(0, 64)
-#         # ax.set_yticks(major_ticks)
-#         #
-#         # plt.ylim([0, 15])
-#         # plt.xlim([0, 140])
-#         # ax.grid(True, which='both')
-#         # plt.minorticks_on
-#         # # ax.grid(which="minor", color='k')
-#         # ax.set_ylabel('Class - k')
-#         # ax.set_xlabel('Sample - n')
-#         #
-#         # plt.plot(signalx, label="Smoothed Signal", alpha=0.4)
-#         # plt.plot(processed, label="Discretized Signal")
-#         # # ticklines = ax.get_xticklines() + ax.get_yticklines()
-#         # gridlines = ax.get_ygridlines()  # + ax.get_ygridlines()
-#         # ticklabels = ax.get_xticklabels() + ax.get_yticklabels()
-#         #
-#         # for line in gridlines:
-#         #     line.set_color('k')
-#         #     line.set_linestyle('-')
-#         #     line.set_linewidth(1)
-#         #     line.set_alpha(0.2)
-#         #
-#         # for label in ticklabels:
-#         #     label.set_color('r')
-#         #     label.set_fontsize('medium')
-#         # plt.legend()
-#         #
-#         # plt.show()
-#     # except:
-#     #     print("Error")
-#
-# print("Saving signals...")
-# np.savez("signals_without_noise.npz", signals_without_noise=signals_without_noise)
-# #
-print("Loading signals...")
-noise_filename = "../data/ecg_noisy_signals.npz"
-npzfile = np.load(noise_filename)
-processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
+def make_noise_signals(full_paths, max_target_SNR=16, signal_dim=64):
+    target_SNR_array = np.arange(max_target_SNR, max_target_SNR-10, -1)
+    N_SIGNALS, N_NOISE, N_SAMPLES = len(full_paths), len(target_SNR_array), 0
+    processed_noise_array = np.zeros((N_NOISE, N_SIGNALS, len(sio.loadmat(full_paths[0])['val'][0])))
+    SNR = np.zeros(N_NOISE)
+    for i, file_path in zip(range(len(full_paths)), full_paths):
+        print("Processing " + file_path)
+        signal = sio.loadmat(file_path)['val'][0]
+        signal = remove_moving_std(remove_moving_avg((signal - np.mean(signal)) / np.std(signal)))
+        smoothed_signal = smooth(signal)
 
-# plt.show()
-for SNR, signals_with_noise in zip(SNRs[SNRs==10], processed_noise_array[SNRs==10]):
-    for i, signal in zip(range(15,len(signals_with_noise)),signals_with_noise[15:]):
-        name = 'ecg_SNR_' + str(SNR) + str(i+1)
-        signal2model = Signal2Model(name, signal_directory, hidden_dim=hidden_dim, batch_size=batch_size,
-                                    mini_batch_size=mini_batch_size, window_size=window_size)
-        model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
-        model.train(signal, signal2model)
+        SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
+
+        last_std = 0.0001
+        j = 0
+        for target_SNR in target_SNR_array:
+            signal_with_noise, last_std = make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=last_std)
+            processed_noise_array[j, i, :] = process_dnn_signal(signal_with_noise, signal_dim)
+            j += 1
+
+    return processed_noise_array, target_SNR_array
+
+
+def calculate_signal_to_noise_ratio(signal, smoothed_signal):
+    signal = signal[13000:19000]
+    smoothed_signal = smoothed_signal[13000:19000]
+    noise_signal = smoothed_signal - signal
+    SMOOTH_AMPLITUDE = np.max(smoothed_signal) - np.min(smoothed_signal)
+    NOISE_AMPLITUDE = np.mean(np.abs(noise_signal)) * 2
+    SNR = (10 * np.log10(SMOOTH_AMPLITUDE / NOISE_AMPLITUDE))
+    return SNR
+
+
+def make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=0.0001):
+    SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
+    added_noise = np.random.normal(0, last_std, len(signal))
+    signal_with_noise = np.array(np.array(signal) + added_noise)
+    print("Processing SNR {0}".format(target_SNR))
+    if SNR < target_SNR:
+        signal = smoothed_signal
+
+    while int(SNR*100) != target_SNR*100:
+
+        added_noise = np.random.normal(0, last_std, len(signal))
+        signal_with_noise = np.array(np.array(signal) + added_noise)
+        SNR = calculate_signal_to_noise_ratio(signal_with_noise, smoothed_signal)
+
+        if int(SNR*100) > target_SNR*100:
+            last_std *= 2
+        else:
+            last_std *= 0.2
+
+    return signal_with_noise, last_std
+
+if __name__ == "__main__":
+    signal_dim = 256
+    hidden_dim = 256
+    mini_batch_size = 16
+    batch_size = 128
+    window_size = 1024
+    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size, signal_dim)
+    dir_name = TRAINED_DATA_DIRECTORY + signal_directory
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    noise_filename = dir_name + "/signals_without_noise_[{}].npz".format(signal_dim)
+
+    # get noisy signals:
+    full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1, 21)))
+    # processed_noise_array, SNRs = make_noise_signals(full_paths, max_target_SNR=12, signal_dim=signal_dim)
+    # print("Saving signals...")
+    #
+    # np.savez(noise_filename,
+    #          processed_noise_array=processed_noise_array, SNRs = SNRs)
+
+    print("Loading signals...")
+    # noise_filename = "../data/ecg_noisy_signals.npz"
+    npzfile = np.load(noise_filename)
+    processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
+
+    # plt.show()
+    for SNR, signals_with_noise in zip(SNRs, processed_noise_array):
+        for i, signal in zip(range(len(signals_with_noise)), signals_with_noise):
+            if SNR == 12 and i < 7 :
+                pass
+            elif SNR < 8:
+                name = 'ecg_' + str(i+1) + '_SNR_' + str(SNR)
+                signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
+                                            batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size)
+                running_ok = False
+                while not running_ok:
+                    model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
+                    running_ok = model.train(signal, signal2model)
 

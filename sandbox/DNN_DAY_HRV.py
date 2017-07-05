@@ -1,8 +1,7 @@
 import numpy as np
 
-import DeepLibphys.models.libphys_MBGRU as GRU
 import DeepLibphys.utils.functions.database as db
-from DeepLibphys.utils.functions.common import get_signals_tests, get_random_batch, randomize_batch, plot_confusion_matrix, segment_matrix
+from DeepLibphys.utils.functions.common import *
 from DeepLibphys.utils.functions.database import ModelInfo, SignalInfo
 from DeepLibphys.utils.functions.signal2model import Signal2Model
 from scipy import interpolate
@@ -10,6 +9,7 @@ import matplotlib.pyplot as plt
 import math
 import time
 import seaborn
+import DeepLibphys.models.LibphysMBGRU as GRU
 
 GRU_DATA_DIRECTORY = "../data/trained/"
 
@@ -19,138 +19,34 @@ def load_test_data(filetag=None, dir_name=None):
     npzfile = np.load(filename)
     return npzfile["test_data"]
 
-# def calculate_loss_tensors(N_Windows, W, signals_models):
-#     N_Versions = len(signals_models)
-#     N_Signals = len(signals_models[0])
-#     loss_tensor = np.zeros((N_Versions, N_Signals, N_Signals, N_Windows))
-#     X_matrix = np.zeros((N_Versions, N_Signals, N_Windows, W))
-#     Y_matrix = np.zeros((N_Versions, N_Signals, N_Windows, W))
-#
-#     i = 0
-#     for model_info in signals_models[0]:
-#         x_tests = []
-#         y_tests = []
-#         for version in range(N_Versions):
-#             [x_test, y_test] = load_test_data(
-#                 "GRU_" + model_info.dataset_name + "[" + str(model_info.Sd) + "." + str(model_info.Hd) + ".-1.-1.-1]"
-#                 , model_info.directory)
-#             x_tests.append(x_test)
-#             y_tests.append(y_test)
-#         X_matrix[:, i, :, :], Y_matrix[:, i, :, :] = randomize_batch(np.asarray(x_test), np.asarray(y_test), N_Windows)
-#     i += 1
-#
-#     print("Loading base model...")
-#     model_info = signals_models[0][0]
-#     signal2model = Signal2Model(model_info[0].dataset_name, model_info[0].directory, signal_dim=model_info[0].Sd,
-#                                 hidden_dim=model_info[0].Hd, window_size=model_info[0].W, mini_batch_size=N_Windows)
-#     model = GRU.LibphysMBGRU(signal2model)
-#
-#     for m in range(N_Signals):
-#         for version in range(N_Versions):
-#             model_info = signals_models[version][m]
-#             model.model_name = model_info.dataset_name
-#             model.load()
-#             print("Processing " + model_info.name)
-#
-#             for s in range(N_Signals):
-#                 x_test = X_matrix[version, s, :, :]
-#                 y_test = Y_matrix[version, s, :, :]
-#                 print("Calculating loss for " + signals_models[version][s].name, end=';\n ')
-#                 loss_tensor[version, m, s, :] = np.asarray(model.calculate_loss_vector(x_test, y_test))
-#
-#     np.savez(filename + ".npz",
-#              loss_tensor=loss_tensor,
-#              signals_models=signals_models,
-#              signals_tests=signals_info)
-#
-#     return loss_tensor
 
-def calculate_loss_tensor(filename, Total_Windows=None, W=256, signals_models=[], test_signals=None, signals_info=None):
-    if signals_info is None:
-        if Total_Windows is None:
-            Total_Windows = 1000000000
-            for model_info in signals_models:
-                [x_test, y_test] = load_test_data(model_info.dataset_name
-                                                  , model_info.directory)
-                if np.shape(x_test)[0]<Total_Windows:
-                    Total_Windows = np.shape(x_test)[0]
+def calculate_loss_tensor(filename, signals_models=[], test_signals=None, labels=None):
+    X_Windows = test_signals[:, :-1]
+    Y_Windows = test_signals[:, 1:]
+    N_Signals = np.shape(X_Windows)[0]
 
-        print("Number of Windows: {0}".format(Total_Windows))
-
-        n_windows = Total_Windows
-        if Total_Windows / 256 > 1:
-            ratio = round(Total_Windows / 256)
-            n_windows = 16#int(Total_Windows/ratio)
-        n_windows = 16
-        windows = np.arange(int(Total_Windows/n_windows))
-        N_Windows = len(windows)
-        Total_Windows = int(N_Windows*n_windows)
-        N_Signals = len(signals_models)
-        N_Models = N_Signals
-
-    else:
-        N = [signal_info.size for signal_info in signals_info]
-        N = min(N)
-        step = int(W*0.33)
-        if Total_Windows is None:
-            windows = np.arange(0, N-step-1, step)
-            Total_Windows = len(windows) - 2
-
-        n_windows = Total_Windows
-        if Total_Windows / 256 > 1:
-            ratio = round(Total_Windows / 256)
-            n_windows = int(Total_Windows/ratio)
-
-        windows = np.arange(int(Total_Windows/n_windows))
-        N_Windows = len(windows)
-        Total_Windows = int(N_Windows*n_windows)
-        N_Signals = len(signals)
-        N_Models = len(signals_models)
-        n_windows = Total_Windows
-
-    loss_tensor = np.zeros((N_Models, N_Signals, Total_Windows))
-    X_matrix = np.zeros((N_Signals, Total_Windows, W))
-    Y_matrix = np.zeros((N_Signals, Total_Windows, W))
-    i = 0
-    if test_signals is None:
-        for model_info in signals_models:
-            [x_test, y_test] = load_test_data(model_info.dataset_name
-                                          , model_info.directory)
-            X_matrix[i, :, :], Y_matrix[i, :, :] = randomize_batch(x_test, y_test, Total_Windows)
-            i += 1
-
-    else:
-        for signal, signal_info in zip(test_signals, signals_info):
-            signal_windows = segment_matrix(signal, W, 0.33)
-            X_matrix[i, :, :], Y_matrix[i, :, :] = randomize_batch(signal_windows[0], signal_windows[1], Total_Windows)
-            i += 1
-
-
+    n_windows = np.shape(X_Windows)[0]
     print("Loading model...")
     model_info = signals_models[0]
+    signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
+                                hidden_dim=model_info.Hd, mini_batch_size=n_windows)
+    model = GRU.LibphysMBGRU(signal2Model)
 
-    model = GRU.LibPhys_GRU(model_info.Sd, hidden_dim=model_info.Hd, signal_name=model_info.dataset_name,
-                            n_windows=n_windows)
-
+    loss_tensor = np.zeros((len(signals_models), N_Signals))
     for m in range(len(signals_models)):
         model_info = signals_models[m]
-        model.signal_name = model_info.dataset_name
-        model.load(signal_name=model_info.name, filetag=model.get_file_tag(model_info.DS,
-                                                                           model_info.t),
-                   dir_name=model_info.directory)
+        model.model_name = model_info.dataset_name
+        model.load(dir_name=model_info.directory)
         print("Processing " + model_info.name)
 
-        for s in range(N_Signals):
-            if signals_info is not None:
-                print("Calculating loss for " + signals_info[s].name, end=';\n ')
-            else:
-                print("Calculating loss for " + signals_models[s].name, end=';\n ')
-            for w in windows:
-                index = w * n_windows
-                x_test = X_matrix[s, index:index+n_windows, :]
-                y_test = Y_matrix[s, index:index+n_windows, :]
-                loss_tensor[m, s, index:index+n_windows] = np.asarray(model.calculate_loss_vector(x_test, y_test))
-                print(np.mean(loss_tensor[m, s, index:index+n_windows]))
+        # for s in range(N_Signals):
+            # if labels is not None:
+            #     print("Calculating loss for " + labels[s], end=';\n ')
+            # else:
+            #     print("Calculating loss for " + signals_models[s].name, end=';\n ')
+
+        loss_tensor[m, :] = np.asarray(model.calculate_mse_vector(X_Windows, Y_Windows))
+        print(np.mean(loss_tensor[m, :]))
 
     np.savez(filename + ".npz",
              loss_tensor=loss_tensor,
@@ -213,8 +109,8 @@ def get_sinal_predicted_matrix(Mod, Sig, loss_tensor, signals_models, signals_te
 
     return calculate_classification_matrix(loss_tensor[Mod][:, Sig, :]), labels_model, labels_signals
 
-def calculate_classification_matrix(loss_tensor):
-    N_Windows = np.shape(loss_tensor)[2]
+def calculate_classification_array(loss_tensor, labels):
+    N_Windows = 1
 
     # for i in range(np.shape(loss_tensor)[1]):
     #     loss_tensor[:,i,:] = loss_tensor[:,i,:] / np.max(loss_tensor[:,i,:])
@@ -227,13 +123,47 @@ def calculate_classification_matrix(loss_tensor):
     #     loss_tensor[:, i, :] = loss_tensor[:, i, :] - np.min(loss_tensor[:, i, :])
     #     loss_tensor[:, i, :] = loss_tensor[:, i, :] / np.max(loss_tensor[:, i, :])
 
-    predicted_matrix = np.argmin(loss_tensor, axis=0)
+    labelsx = list(range(max(labels)))
+    for i in range(len(labelsx)):
+        labelsx[i] = np.where(np.array(labels) - 1 == i)[0]
 
-    sinal_predicted_matrix = np.zeros((np.shape(loss_tensor)[0], np.shape(loss_tensor)[1]))
+    predicted_array = np.argmin(loss_tensor, axis=0)
+    sinal_predicted_matrix = np.zeros((np.shape(loss_tensor)[0], np.shape(loss_tensor)[0]))
 
-    for i in range(np.shape(sinal_predicted_matrix)[0]):
-        for j in range(np.shape(sinal_predicted_matrix)[1]):
-            sinal_predicted_matrix[i, j] = sum(predicted_matrix[j, :] == i) / N_Windows
+    for i, labels in zip(range(len(labelsx)), labelsx):
+        for j in range(len(labelsx)):
+            sinal_predicted_matrix[i, j] = np.sum(predicted_array[labels] == j) / len(labels)
+
+    return sinal_predicted_matrix
+
+
+def calculate_probability_matrix(loss_tensor, labels):
+    N_Windows = 1
+
+    # for i in range(np.shape(loss_tensor)[1]):
+    #     loss_tensor[:,i,:] = loss_tensor[:,i,:] / np.max(loss_tensor[:,i,:])
+
+    # for i in range(np.shape(loss_tensor)[0]):
+    #     loss_tensor[i, :, :] = loss_tensor[i, :, :] - np.min(loss_tensor[i, :, :])
+    #     loss_tensor[i, :, :] = loss_tensor[i, :, :] / np.max(loss_tensor[i, :, :])
+
+    # for i in range(np.shape(loss_tensor)[1]):
+    #     loss_tensor[:, i, :] = loss_tensor[:, i, :] - np.min(loss_tensor[:, i, :])
+    #     loss_tensor[:, i, :] = loss_tensor[:, i, :] / np.max(loss_tensor[:, i, :])
+
+    temp_loss_matrix = 1 / loss_tensor #- np.ones((np.shape(loss_tensor)[0],1))*np.min(loss_tensor, axis=0)
+    # temp_loss_matrix = 1 - (temp_loss_matrix / np.ones((np.shape(temp_loss_matrix)[0],1)).dot(np.reshape(np.sum(temp_loss_matrix, axis=0), (1,np.shape(temp_loss_matrix)[1]))))
+    temp_loss_matrix = (temp_loss_matrix / np.ones((np.shape(temp_loss_matrix)[0], 1)).dot(
+        np.reshape(np.sum(temp_loss_matrix, axis=0), (1, np.shape(temp_loss_matrix)[1]))))
+    # labelsx = list(range(max(labels)))
+    # for i in range(len(labelsx)):
+    #     labelsx[i] = np.where(np.array(labels) - 1 == i)[0]
+    #
+    # # predicted_array = np.argmin(loss_tensor, axis=0)
+    # sinal_predicted_matrix = np.zeros((np.shape(loss_tensor)[0], np.shape(loss_tensor)[1]))
+    sinal_predicted_matrix = temp_loss_matrix
+    # for i, labels in zip(range(len(labelsx)), labelsx):
+    #         sinal_predicted_matrix[predicted_array[labels], labels] = temp_loss_matrix[predicted_array[labels], labels]
 
     return sinal_predicted_matrix
 
@@ -770,49 +700,62 @@ def calculate_min_windows_loss(loss_tensor, batch_size):
 
     return temp_loss_tensor
 
-# CONFUSION_TENSOR_[W,Z]
-N_Windows = None
-W = 256
+if __name__ == "__main__":
+    # CONFUSION_TENSOR_[W,Z]
+    N_Windows = None
+    W = 2397
 
-print("Processing HRV - with #windows of "+str(N_Windows))
-signals_models = db.rr_128_models
-signals_tests = db.day_rr
-all_signals = get_signals_tests(signals_tests, 64)
+    print("Processing HRV - with #windows of "+str(N_Windows))
+    signals_models = db.rr_models
+    all_signals = get_signals_tests(db.day_rr, 64)
 
-i = 0
-j = 0
-signals = []
-signals_info = []
-MAX_J = 0
-for group_signals in all_signals:
-    i += 1
-    MAX_J = j
-    j = 1
-    for person in group_signals[:3]:
-        j += 1
-        signals.append(person)
-        if i < 4:
-            signals_info.append(
-                SignalInfo("rr", "", (i - 1) * (j - 1) + (j - 1), len(person), "RR [{0}.{1}]".format(i, j)))
-        else:
-            signals_info.append(
-                SignalInfo("rr", "", (i - 1) * (j - 1) + (j - 1), len(person), "RR [{0}.{1}]".format(i, MAX_J)))
-            MAX_J += 1
+    i = 0
+    j = 0
+    labels = []
+    labelsx =[]
+    MAX_J = 0
+    signals = []
+    N_Samples = len(all_signals[0][0])
+    for group_signals in all_signals:
+        i += 1
+        MAX_J = j
+        j = 1
+        for person in group_signals:
+            if len(signals) == 0:
+                signals = all_signals[i - 1][j - 1][:W]
+            else:
+                signals = np.vstack((signals, all_signals[i - 1][j - 1][:W]))
 
-filename = '../data/validation/DAY_HRV_LOSS[{0}.{1}]'.format('RR','10Hz')
-# loss_tensor = calculate_loss_tensor(filename, N_Windows, W, signals_models, signals, signals_info)
+            j += 1
+            labels.append(i)
+            if i < 4:
+                labelsx.append(
+                    "RR [{0}.{1}]".format(i, j))
+            else:
+                labelsx.append(
+                    "RR [{0}.{1}]".format(i, j))
 
-npzfile = np.load(filename + ".npz")
-loss_tensor, signals_models,  = \
-    npzfile["loss_tensor"], npzfile["signals_models"]
 
-m_labels = [model_info.name for model_info in signals_models]
-s_labels = [signal_info.name for signal_info in signals_info]
-classified_matrix = calculate_classification_matrix(loss_tensor)
-print_confusion(classified_matrix, s_labels, m_labels)
-# for i in range(5,10):
-#     classified_matrix = calculate_classification_matrix(calculate_min_windows_loss(loss_tensor[0:4,:,:],i))
-#     print_confusion(classified_matrix, s_labels, m_labels)
+
+    filename = 'data/validation/DAY/DAY_HRV_LOSS[{0}.{1}]'.format('RR', '10Hz')
+
+    if not os.path.exists("data/validation/DAY"):
+        os.makedirs("data/validation/DAY")
+
+    # loss_tensor = calculate_loss_tensor(filename, signals_models, np.array(signals), labels)
+
+    npzfile = np.load(filename + ".npz")
+    loss_tensor, signals_models,  = \
+        npzfile["loss_tensor"], npzfile["signals_models"]
+
+    m_labels = [model_info.name for model_info in signals_models]
+    s_labels = labelsx
+    classified_matrix = calculate_classification_array(loss_tensor, labels)
+    classified_matrix = calculate_probability_matrix(loss_tensor, labels)
+    print_confusion(classified_matrix, s_labels, m_labels)
+    # for i in range(5,10):
+    #     classified_matrix = calculate_classification_matrix(calculate_min_windows_loss(loss_tensor[0:4,:,:],i))
+    #     print_confusion(classified_matrix, s_labels, m_labels)
 
 
 

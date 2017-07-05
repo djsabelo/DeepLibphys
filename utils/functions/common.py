@@ -6,7 +6,7 @@ import matplotlib.patheffects as pte
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io as sio
-
+import scipy as scp
 import scipy.signal as sig
 from matplotlib import gridspec
 from matplotlib.font_manager import FontProperties
@@ -17,13 +17,15 @@ import sys
 
 import DeepLibphys.models.libphys_GRU as GRU
 
-DATASET_DIRECTORY = '../data/datasets/'
+DATASET_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/'
 TRAINED_DATA_DIRECTORY = '../data/trained/'
 COLORMAP_DIRECTORY = '../data/biosig_colormap/'
 RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
+FANTASIA_ECG = 'Fantasia/ECG/mat/'
+FANTASIA_RESP = 'Fantasia/RESP/mat/'
 
 class ModelType:
-    MINI_BATCH, SGD = range(2)
+    MINI_BATCH, SGD, CROSS_SGD, CROSS_MBSGD = range(4)
 
 """#####################################################################################################################
 ########################################################################################################################
@@ -112,28 +114,34 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
-def process_dnn_signal(signal, interval_size):
-    plt.plot(signal[1000:2000])
+def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60):
+    # plt.plot(signal[1000:2000])
 
     signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
-    plt.plot(signal[1000:2000])
+    # plt.figure(1)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
 
-    signal = remove_moving_avg(signal)
-    plt.plot(signal[1000:2000])
-
+    signal = remove_moving_avg(signal, window_rmavg)
+    # plt.figure(2)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
 
     signals = remove_moving_std(signal)
 
     if len(np.shape(signal)) > 1:
         print("processing signals")
-        signalx = np.array([smooth(signal_) for signal_ in signals])
-        plt.plot(signalx[0][1000:2000])
+        signalx = np.array([smooth(signal_, window_smooth) for signal_ in signals])
+        # plt.plot(signalx[0][1000:2000])
+        # plt.show()
         return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
     else:
-        signal = smooth(signal)
+        signal = smooth(signal, window_smooth)
+        # plt.figure()
+        # plt.plot(signal[1000:2000])
+        # plt.show()
         ecg = descretitize_signal(signal, interval_size)
-        plt(ecg[1000:2000])
-        plt.show()
+
         return descretitize_signal(signal, interval_size)
 
 
@@ -210,18 +218,25 @@ def remove_moving_std(signal, window_size=2000):
 #####################################################################################################################"""
 
 
-def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir, peak_into_data=False):
+def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_ECG, peak_into_data=False):
     full_paths = get_fantasia_full_paths(dataset_dir, example_index_array)
     signals = []
     for file_path in full_paths:
         signal = sio.loadmat(file_path)['val'][0]
         # signal = (signal - np.mean(signal)) / np.std(signal)
-        signals.append(process_dnn_signal(signal, signal_dim))
+        if dataset_dir.count(FANTASIA_RESP)>0:
+            signals.append(process_dnn_signal(signal, signal_dim, 100, 1000))
+        else:
+            signals.append(process_dnn_signal(signal, signal_dim))
+
 
         if peak_into_data:
             if peak_into_data == True:
                 peak_into_data = 1000
+            plt.figure(1)
             plt.plot(signal[1000:1000+peak_into_data])
+            plt.figure(2)
+            plt.plot(signals[-1][1000:1000+peak_into_data])
             plt.show()
 
     y_train = np.zeros(len(signals)).tolist()
@@ -251,34 +266,66 @@ def get_fantasia_full_paths(dataset_dir, example_index_array):
 
     return full_paths
 
-def get_fantasia_noisy_data(signal_dim, example_index_array, noisy_index, dataset_dir, peak_into_data, regression, smooth_window=10):
-    full_paths = np.zeros(len(example_index_array)).tolist()
-    example_index_array = np.asarray(example_index_array)
-    i = 0
-    for example in example_index_array:
-        file_name = ''
-        if example <= 9:
-            file_name = 'f1o0' + str(example) + 'm'
-        elif example == 10:
-            file_name = 'f1o10m'
-        elif example <= 19:
-            file_name = 'f1y0' + str(example-10) + 'm'
-        elif example == 20:
-            file_name = 'f1y10m'
+def get_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
+    full_paths = os.listdir(dataset_dir)
+    signals = []
+    fs = 360
+    for file_path in full_paths:
+        if file_path[-3:] == "mat":
+            file = dataset_dir+'/'+file_path
+            print("Processing file: {0}".format(file))
+            try:
+                signal = sio.loadmat(file)[val][row]
+                N = len(signal)
+                time = len(signal)/fs
+                iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
+                t = np.arange(0, time-1/500, 1/500)
+                signal = iter_(t)
+                signal = sig.decimate(signal, 2)
+                signal = process_dnn_signal(signal, signal_dim)
+                signals.append(signal)
+                #
+                #         if peak_into_data:
+                if peak_into_data == True:
+                    peak_into_data = 1000
+                    plt.plot(signal[1000:1000+peak_into_data])
+                    plt.show()
+                print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
+            except ValueError:
+                print("Error")
+                pass
 
-        full_paths[i] = RAW_SIGNAL_DIRECTORY + dataset_dir + file_name + '/' + 'value'+str(noisy_index)+'_'+file_name+'.npz'
-        i += 1
-    signals = acquire_and_process_signals(full_paths, signal_dim, peak_into_data=peak_into_data, smooth_window=smooth_window, regression=regression, val='signal')
+    return signals
 
-    if len(signals) > 50:
-        signals = [signals]
 
-    y_train = np.zeros(len(signals)).tolist()
-    print("Signal acquired")
-    for i in range(len(signals)):
-        y_train[i] = signals[i][1:] + [0]
-
-    return signals, y_train
+# def get_fantasia_noisy_data(signal_dim, example_index_array, noisy_index, dataset_dir, peak_into_data, regression, smooth_window=10):
+#     full_paths = np.zeros(len(example_index_array)).tolist()
+#     example_index_array = np.asarray(example_index_array)
+#     i = 0
+#     for example in example_index_array:
+#         file_name = ''
+#         if example <= 9:
+#             file_name = 'f1o0' + str(example) + 'm'
+#         elif example == 10:
+#             file_name = 'f1o10m'
+#         elif example <= 19:
+#             file_name = 'f1y0' + str(example-10) + 'm'
+#         elif example == 20:
+#             file_name = 'f1y10m'
+#
+#         full_paths[i] = RAW_SIGNAL_DIRECTORY + dataset_dir + file_name + '/' + 'value'+str(noisy_index)+'_'+file_name+'.npz'
+#         i += 1
+#     signals = acquire_and_process_signals(full_paths, signal_dim, peak_into_data=peak_into_data, smooth_window=smooth_window, regression=regression, val='signal')
+#
+#     if len(signals) > 50:
+#         signals = [signals]
+#
+#     y_train = np.zeros(len(signals)).tolist()
+#     print("Signal acquired")
+#     for i in range(len(signals)):
+#         y_train[i] = signals[i][1:] + [0]
+#
+#     return signals, y_train
 
 def get_day_dataset(signal_dim, dataset_dir, file_name='ah_r-r', peak_into_data=False, smooth_window=10, regression=False, val='interp'):
     npzfile = np.load(RAW_SIGNAL_DIRECTORY + dataset_dir + file_name + '.npz', encoding='latin1')

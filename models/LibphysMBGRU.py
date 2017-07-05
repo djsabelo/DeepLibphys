@@ -4,7 +4,6 @@ from DeepLibphys.models import LibphysSGDGRU
 from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models.LibphysGRU import LibphysGRU
-import matplotlib.pyplot as plt
 import theano
 import theano.tensor as T
 import time
@@ -14,27 +13,28 @@ from theano import printing
 
 class LibphysMBGRU(LibphysGRU):
 
-    def __init__(self, signal2model):
-        # Assign instance variables
-        E = np.random.uniform(-np.sqrt(1. / signal2model.signal_dim), np.sqrt(1. / signal2model.signal_dim),
-                              (signal2model.hidden_dim, signal2model.signal_dim))
+    def __init__(self, signal2model=None):
+        if signal2model is not None:
+            # Assign instance variables
+            E = np.random.uniform(-np.sqrt(1. / signal2model.signal_dim), np.sqrt(1. / signal2model.signal_dim),
+                                  (signal2model.hidden_dim, signal2model.signal_dim))
 
-        U = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
-                              (9, signal2model.hidden_dim, signal2model.hidden_dim))
-        W = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
-                              (9, signal2model.hidden_dim, signal2model.hidden_dim))
-        V = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
-                              (signal2model.signal_dim, signal2model.hidden_dim))
+            U = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                                  (9, signal2model.hidden_dim, signal2model.hidden_dim))
+            W = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                                  (9, signal2model.hidden_dim, signal2model.hidden_dim))
+            V = np.random.uniform(-np.sqrt(1. / signal2model.hidden_dim), np.sqrt(1. / signal2model.hidden_dim),
+                                  (signal2model.signal_dim, signal2model.hidden_dim))
 
-        b = np.zeros((9, signal2model.hidden_dim))
-        c = np.zeros(signal2model.signal_dim)
+            b = np.zeros((9, signal2model.hidden_dim))
+            c = np.zeros(signal2model.signal_dim)
 
-        super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
-        self.one_matrix = theano.shared(name='one',
-                                        value=np.ones((self.hidden_dim, self.mini_batch_size)).astype(theano.config.floatX))
+            super().__init__(signal2model, ModelType.MINI_BATCH, [E, U, W, V, b, c])
 
-        self.theano = {}
-        self.__theano_build__()
+            self.theano = {}
+            self.__theano_build__()
+        else:
+            super().__init__(None, ModelType.MINI_BATCH, None)
 
     def __theano_build__(self):
         parameters = [E, V, U, W, b, c] = self.E, self.V, self.U, self.W, self.b, self.c
@@ -92,7 +92,7 @@ class LibphysMBGRU(LibphysGRU):
 
         e = ((prediction - y.T) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1])
         cost_batch = self.calculate_ce_vector(o, y)
-        mse_cost_batch = self.calculate_mean_squared_error_vecor(prediction, y)
+        mse_cost_batch = self.calculate_mean_squared_error_vector(prediction, y)
         # Total cost
         cost = (1 / self.mini_batch_size) * self.calculate_error(o, y)
 
@@ -119,7 +119,7 @@ class LibphysMBGRU(LibphysGRU):
     def calculate_ce_vector(self, O, Y):
         return [T.sum(T.nnet.categorical_crossentropy(O[:, :, i], Y[i, :])) for i in range(self.mini_batch_size)]
 
-    def calculate_mean_squared_error_vecor(self, Pred, Y):
+    def calculate_mean_squared_error_vector(self, Pred, Y):
         return T.mean(T.power(Pred.T-Y, 2), axis=1)
 
     def calculate_total_loss(self, X, Y):
@@ -139,3 +139,19 @@ class LibphysMBGRU(LibphysGRU):
         model.load(self.model_name, filetag=self.get_file_tag(-5,-5))
 
         return model.generate_predicted_signal(N, starting_signal, window_seen_by_GRU_size)
+
+    def _get_new_parameters(self):
+        E = np.random.uniform(-np.sqrt(1. / self.signal_dim), np.sqrt(1. / self.signal_dim),
+                              (self.hidden_dim, self.signal_dim))
+
+        U = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (9, self.hidden_dim, self.hidden_dim))
+        W = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (9, self.hidden_dim, self.hidden_dim))
+        V = np.random.uniform(-np.sqrt(1. / self.hidden_dim), np.sqrt(1. / self.hidden_dim),
+                              (self.signal_dim, self.hidden_dim))
+
+        b = np.zeros((9, self.hidden_dim))
+        c = np.zeros(self.signal_dim)
+
+        return [E, U, W, V, b, c]
