@@ -66,6 +66,8 @@ def SGD(cost, params, lr=0.1):
 0.9853
 0.9896
 0.9874'''
+
+
 def Adam(cost, params, lr=0.001, beta1=0.9, beta2=.999, epsilon=1e-6):
     grads = T.grad(cost=cost, wrt=params)
     #noise = theano.shared(np.float32(np.random.randn() * 0.001), 'noise')
@@ -87,6 +89,7 @@ def Adam(cost, params, lr=0.001, beta1=0.9, beta2=.999, epsilon=1e-6):
         updates.append((p, p - lr_t * g_t))
     return updates
 
+
 def model(X, w, w2, w3, w4, p_drop_conv, p_drop_hidden):
     l1a = rectify(conv2d(X, w, border_mode='full'))
     l1 = pool_2d(l1a, (2, 2))
@@ -106,6 +109,7 @@ def model(X, w, w2, w3, w4, p_drop_conv, p_drop_hidden):
 
     pyx = softmax(T.dot(l4, w_o))
     return l1, l2, l3, l4, pyx
+
 
 trX, teX, trY, teY = mnist(onehot=True)
 
