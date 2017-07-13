@@ -130,9 +130,10 @@ class LibphysSGDGRU(LibphysGRU):
         num_words = np.sum([len(y) for y in Y])
         return self.calculate_total_loss(X, Y) / float(num_words)
 
-    def generate_predicted_signal(self, N, starting_signal, window_seen_by_GRU_size):
+    def generate_predicted_signal(self, N, starting_signal, window_seen_by_GRU_size, uncertaintly):
         # We start the sentence with the start token
         new_signal = starting_signal
+        prob = []
         probabilities = np.zeros((self.signal_dim, N))
         state_grus = np.zeros((3, self.hidden_dim, N))
         update_gate = np.zeros((self.hidden_dim, N))
@@ -146,37 +147,42 @@ class LibphysSGDGRU(LibphysGRU):
             elif int(i*100/N)% 20 == 0:
                 percent += 0.2
                 print('{0}%'.format(percent))
-            new_signal.append(self.generate_online_predicted_signal(starting_signal, window_seen_by_GRU_size))
+            x, p = self.generate_online_predicted_signal(starting_signal, window_seen_by_GRU_size, uncertaintly)
+            new_signal.append(x)
+            prob.append(p)
 
-        return new_signal[1:]
+        return new_signal[1:], prob
 
     def generate_online_predicted_signal(self, starting_signal, window_seen_by_GRU_size, uncertaintly=0.05):
-        new_signal = starting_signal
+        new_signal = np.array(starting_signal)
         next_sample = None
-        try:
-            if len(new_signal) <= window_seen_by_GRU_size:
-                signal = new_signal
-            else:
-                signal = new_signal[-window_seen_by_GRU_size:]
+        xxx = None
+        next_sample_probs = [12]
+        # try:
+        if len(new_signal) <= window_seen_by_GRU_size:
+            signal = new_signal
+        else:
+            signal = new_signal[-window_seen_by_GRU_size:]
 
-            [output] = self.predict(signal)
-            next_sample_probs = np.asarray(output, dtype=float)
-            next_sample_probs = next_sample_probs[-1] / np.sum(next_sample_probs[-1])
+        [output] = self.predict(signal)
+        next_sample_probs = np.asarray(output, dtype=float)
+        next_sample_probs = next_sample_probs[-1] / np.sum(next_sample_probs[-1])
 
-            means = np.where(next_sample_probs > 0.01)[0]
-            xxx = np.zeros(64)
-            for mean_ in means:
-                xxx += norm.pdf(np.arange(64), mean_, uncertaintly) * next_sample_probs[mean_]
+        means = np.where(next_sample_probs > 0.01)[0]
+        xxx = np.zeros(64)
+        for mean_ in means:
+            xxx += norm.pdf(np.arange(64), mean_, uncertaintly) * next_sample_probs[mean_]
 
-            xxx = xxx / np.sum(xxx)
+        xxx = xxx / np.sum(xxx)
+
             # next_sample_probs = np.random.multinomial(1, next_sample_probs)
-            next_sample = np.random.choice(64, p=xxx)
+        next_sample = np.random.choice(64, p=xxx)
             # next_sample = np.argmax(sample)
-        except:
-            print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
-            next_sample = 0
+        # except:
+        #     print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
+        #     next_sample = 0
         # plt.plot(np.arange(len(next_sample_probs)), next_sample_probs, 'k-', next_sample, xxx[next_sample], 'ro')
         # plt.plot(np.arange(len(xxx)), xxx, 'g-')
         # print(next_sample)
         # plt.show()
-        return next_sample
+        return next_sample, xxx

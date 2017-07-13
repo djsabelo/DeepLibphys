@@ -1222,7 +1222,7 @@ def process_all_eers(loss_quaternion, SNRs, iterations=1, loss_iteration=0, batc
                                savePdf=False, SNR=SNR, name=str(loss_iteration), batch_size=batch_size, decimals=decimals)
         mean_EERs.append(EERs)
 
-    np.savez(SNR_DIRECTORY + "/eers_{0}.npz".format(iterations), EERs=mean_EERs)
+    np.savez(SNR_DIRECTORY + "/eers_{0}.npz".format(loss_iteration), EERs=mean_EERs)
 
     return mean_EERs
 

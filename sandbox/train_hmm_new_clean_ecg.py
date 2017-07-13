@@ -3,14 +3,16 @@ import time
 import numpy as np
 
 import DeepLibphys
+import DeepLibphys.models.LibphysMBGRU as GRU
 import DeepLibphys.utils.functions.database as db
 from novainstrumentation import smooth
 from DeepLibphys.utils.functions.common import *
 import matplotlib.pyplot as plt
 from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
+from hmmlearn import hmm
+from sklearn.externals import joblib
 import seaborn
-import DeepLibphys.models.LibphysMBGRU as GRU
 
 
 def process_and_save_fantasia(plot=False, signal_dim=64):
@@ -73,13 +75,13 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
 
 
 def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
-    for i, signal in zip(indexes, signals[indexes]):
+    for i, signal in zip(indexes, signals):
         name = 'ecg_' + str(i)
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
                                     save_interval=save_interval)
         print("Compiling Model {0}".format(name))
-        model = GRU.LibphysMBGRU(signal2model)
+        model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
         print("Initiating training... ")
         model.train(signal, signal2model)
 
@@ -88,10 +90,10 @@ hidden_dim = 256
 mini_batch_size = 16
 batch_size = 128
 window_size = 512
-save_interval = 10000
+save_interval = 1000
 signal_directory = 'BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = [7]
+indexes = np.arange(1, 21)
 
 print("Loading signals...")
 # signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
@@ -99,5 +101,46 @@ print("Loading signals...")
 # np.savez("../data/FANTASIA_ECG[64].npz", x_train=x_train, y_train=y_train)
 x_train, y_train = np.load("../data/FANTASIA_ECG[64].npz")['x_train'], np.load("../data/FANTASIA_ECG[64].npz")['y_train']
 
-train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
-               signal_dim)
+# joblib.load("filename.pkl")
+
+i = 0
+for signal in x_train:
+    i += 1
+    print(i)
+    X = signal[11000:int(11000+(512*128*0.33))].reshape(-1, 1)
+    model = hmm.GaussianHMM(signal_dim, n_iter=10000, tol=0.005)
+    model.fit(X)
+    plt.plot(model.predict(X))
+    plt.show()
+    joblib.dump(model, "../data/hmm_ecg_"+str(i)+".pkl")
+
+# N = 100
+# for i, signal in zip(range(1, len(x_train)+1), x_train):
+#     # try:
+#         X = [np.random.randint(0, signal_dim-1)]
+#         X_ = []
+#         for n in range(N):
+#             model = joblib.load("../data/hmm_ecg_"+str(i)+".pkl")
+#             x = np.array(X).reshape(-1, 1)
+#             y = model.predict(x)
+#             X += [y[-1]]
+#             print(X)
+#         plt.plot(X)
+#         plt.show()
+
+N = 100
+for i, signal in zip(range(1, len(x_train) + 1), x_train):
+    # try:
+    X = [np.random.randint(0, signal_dim - 1)]
+    X_ = []
+
+    model = joblib.load("../data/hmm_ecg_" + str(i) + ".pkl")
+    X = signal[11000:int(11000 + (512 * 128 * 0.33))].reshape(-1, 1)
+    y = model.predict(X)
+    print(X[1:] - y)
+    plt.plot(X[1:])
+    plt.plot(y)
+    plt.show()
+
+    # except:
+    #     print("Error in "+str(i))

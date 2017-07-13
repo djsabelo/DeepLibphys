@@ -1211,14 +1211,26 @@ def load_tests_cybhi():
     train_dates, train_names, test_dates, test_names, test_signals = \
         file["train_dates"], file["train_names"], file["test_dates"], file["test_names"], file["test_signals"]
 
-    indexes = sorted(range(len(test_signals)), key=lambda k: test_signals[k])
-    train_dates, train_names, train_signals = train_dates[indexes], train_names[indexes]
+    indexes_ = sorted(range(len(test_signals)), key=lambda k: test_names[k])
+    train_dates, train_names = train_dates[indexes_], train_names[indexes_]
 
     indexes = []
     for name in train_names:
-        indexes.append(test_names.index(name))
+        indexes.append(test_names.tolist().index(name))
 
     return test_signals[indexes]
+
+def load_train_cybhi():
+    processed_data_path = '../data/biometry_cybhi[256].npz'
+
+    file = np.load(processed_data_path)
+    train_dates, train_names, test_dates, test_names, train_signals = \
+        file["train_dates"], file["train_names"], file["test_dates"], file["test_names"], file["train_signals"]
+
+    indexes_ = sorted(range(len(test_signals)), key=lambda k: test_names[k])
+
+    return train_signals[indexes_]
+
 
 if __name__ == "__main__":
     N_Windows = None
@@ -1233,7 +1245,16 @@ if __name__ == "__main__":
     processed_data_path = '../data/biometry_cybhi[256].npz'
 
     all_models_info = [db.cybhi_1024]#process_alternate_eer
+    test_signals = load_tests_cybhi()
+    train_signals = load_train_cybhi()
 
+    for train_signal, i in zip(train_signals, range(len(train_signals))):
+
+        plt.plot(train_signal)
+        if i % 5 == 0:
+            plt.show()
+
+    # classify_biosignals(SNR_DIRECTORY + "/LOSS_FOR_iteration_0", w_for_classification=1)
     # for i in range(5, 10):
     #     classify_biosignals(SNR_DIRECTORY + "/LOSS_FOR_iteration_0", w_for_classification=i)
     # print(xyu)
@@ -1246,7 +1267,7 @@ if __name__ == "__main__":
     loss_tensor = []
     mean_EERs =[]
     for iteration in range(iterations):
-        test_signals = load_tests_cybhi()[:len(all_models_info[0])]
+
         filename = SNR_DIRECTORY + "/LOSS_FOR_iteration_{0}".format(iteration)
         n_windows = 100000000000000000
         for test_signal in test_signals:
@@ -1260,7 +1281,7 @@ if __name__ == "__main__":
             loss_tensor = np.load(filename + ".npz")["loss_tensor"][:, :58]
 
         EERs = process_alternate_eer(loss_tensor, iterations=iterations,
-                               savePdf=False, name=str(iteration), batch_size=batch_size)
+                               savePdf=False, name=str(iteration), batch_size=n_windows)
 
         np.savez(SNR_DIRECTORY + "/eers_{0}.npz".format(iteration), EERs=EERs)
         EERs = np.load(SNR_DIRECTORY +"/eers_{0}.npz".format(iteration))['EERs']

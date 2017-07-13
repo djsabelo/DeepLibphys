@@ -6,13 +6,12 @@ from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models.LibphysGRU import LibphysGRU
 import theano
 import theano.tensor as T
-from scipy.stats import norm
 import time
 import sys
 import math
 from theano import printing
 
-class LibphysMBGRU(LibphysGRU):
+class LibphysMBGRU_Relu(LibphysGRU):
 
     def __init__(self, signal2model=None):
         if signal2model is not None:
@@ -53,8 +52,8 @@ class LibphysMBGRU(LibphysGRU):
                 b2 = T.specify_shape((coversion_ones * b[i * 3 + 1, :]).T, T.shape(x_0))
                 b3 = T.specify_shape((coversion_ones * b[i * 3 + 2, :]).T, T.shape(x_0))
 
-                z = T.nnet.hard_sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b1)
-                r = T.nnet.hard_sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b2)
+                z = T.nnet.relu(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b1, 0.8)
+                r = T.nnet.relu(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b2, 0.8)
                 s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b3)
 
                 return (T.ones_like(z) - z) * s_candidate + z * s_previous
@@ -126,10 +125,12 @@ class LibphysMBGRU(LibphysGRU):
     def calculate_total_loss(self, X, Y):
         num_words = float(np.shape(X)[0] * np.shape(X)[1])
         return np.sum([self.ce_error(X[i:i + self.mini_batch_size, :], Y[i:i + self.mini_batch_size, :])
-                       for i in range(0, np.shape(X)[0], self.mini_batch_size)]) / num_words
+                       for i in range(0, np.shape(X)[0], self.mini_batch_size)])
+
 
     def calculate_loss(self, X, Y):
-        return self.calculate_total_loss(X, Y)
+
+        return self.calculate_total_loss(X, Y) / num_words
 
     def generate_predicted_signal(self, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
         signal2model = Signal2Model(self.model_name, self.get_directory_tag(), signal_dim=self.signal_dim,
@@ -139,58 +140,6 @@ class LibphysMBGRU(LibphysGRU):
         model.load(self.model_name, filetag=self.get_file_tag(-5,-5))
 
         return model.generate_predicted_signal(N, starting_signal, window_seen_by_GRU_size)
-
-    def generate_predicted_vector(self, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
-        # We start the sentence with the start token
-        new_signal = np.array(starting_signal).reshape((len(starting_signal, 1)))
-        # Repeat until we get an end token
-        print('Starting model generation')
-        percent = 0
-        for i in range(N):
-            if int(i * 100 / N) % 5 == 0:
-                print('.', end='')
-            elif int(i * 100 / N) % 20 == 0:
-                percent += 0.2
-                print('{0}%'.format(percent))
-            new_signal.append(self.generate_online_predicted_vector(starting_signal, window_seen_by_GRU_size))
-
-        return new_signal[1:]
-
-        return model.generate_predicted_signal(N, starting_signal, window_seen_by_GRU_size)
-
-    def generate_online_predicted_vector(self, starting_signal, window_seen_by_GRU_size, uncertaintly=0.05):
-        new_signal = np.array(starting_signal)
-        next_sample = None
-        xxx = None
-        next_sample_probs = [12]
-        # try:
-        if len(new_signal) <= window_seen_by_GRU_size:
-            signal = new_signal
-        else:
-            signal = new_signal[-window_seen_by_GRU_size:]
-
-        [output] = self.predict(signal)
-        next_sample_probs = np.asarray(output, dtype=float)
-        next_sample_probs = next_sample_probs[-1] / np.sum(next_sample_probs[-1], axis=0)
-
-        means = np.where(next_sample_probs[-1] / np.sum(next_sample_probs[-1], axis=0) > 0.01)[0]
-        xxx = np.zeros(64)
-        # for i in range(np.shape(means)[-1]):
-        #     xxx += norm.pdf(np.arange(64), means[:, i], uncertaintly) * next_sample_probs[means[:, i]]
-
-        xxx = xxx / np.sum(xxx, axis=0)
-
-        # next_sample_probs = np.random.multinomial(1, next_sample_probs)
-        next_sample = np.random.choice(64, p=xxx, size=(np.shape(xxx)[0]))
-        # next_sample = np.argmax(sample)
-        # except:
-        #     print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
-        #     next_sample = 0
-        # plt.plot(np.arange(len(next_sample_probs)), next_sample_probs, 'k-', next_sample, xxx[next_sample], 'ro')
-        # plt.plot(np.arange(len(xxx)), xxx, 'g-')
-        # print(next_sample)
-        # plt.show()
-        return next_sample
 
     def _get_new_parameters(self):
         E = np.random.uniform(-np.sqrt(1. / self.signal_dim), np.sqrt(1. / self.signal_dim),

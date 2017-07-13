@@ -3,6 +3,7 @@ import time
 import numpy as np
 
 import DeepLibphys
+import DeepLibphys.models.LibphysMBGRU as GRU
 import DeepLibphys.utils.functions.database as db
 from novainstrumentation import smooth
 from DeepLibphys.utils.functions.common import *
@@ -10,7 +11,6 @@ import matplotlib.pyplot as plt
 from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
 import seaborn
-import DeepLibphys.models.LibphysMBGRU as GRU
 
 
 def process_and_save_fantasia(plot=False, signal_dim=64):
@@ -72,32 +72,35 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
     np.savez("signals_without_noise.npz", signals_without_noise=signals_without_noise)
 
 
-def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
+def train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
     for i, signal in zip(indexes, signals[indexes]):
-        name = 'ecg_' + str(i)
+        name = 'emg_' + str(i+1)
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
                                     save_interval=save_interval)
-        print("Compiling Model {0}".format(name))
-        model = GRU.LibphysMBGRU(signal2model)
-        print("Initiating training... ")
-        model.train(signal, signal2model)
+
+        returned = False
+        while not returned:
+            print("Compiling Model {0}".format(name))
+            model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
+            print("Initiating training... ")
+            returned = model.train(signal, signal2model, overlap=0.10)
 
 signal_dim = 64
 hidden_dim = 256
 mini_batch_size = 16
 batch_size = 128
-window_size = 512
-save_interval = 10000
-signal_directory = 'BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+window_size = 1024
+save_interval = 1000
+signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = [7]
+indexes = np.array([2, 14]) - 1
 
 print("Loading signals...")
-# signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
-# x_train, y_train = get_fantasia_dataset(signal_dim, indexes, db.fantasia_ecgs[0].directory, peak_into_data=False)
-# np.savez("../data/FANTASIA_ECG[64].npz", x_train=x_train, y_train=y_train)
-x_train, y_train = np.load("../data/FANTASIA_ECG[64].npz")['x_train'], np.load("../data/FANTASIA_ECG[64].npz")['y_train']
+x_train, y_train = get_fmh_emg_datset(signal_dim, dataset_dir="EMG_Lower", row=0)
+# np.savez("../data/FMH_[64].npz", x_train=x_train, y_train=y_train)
+# x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
+print(len(x_train))
 
-train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
+train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
                signal_dim)

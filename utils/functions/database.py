@@ -196,11 +196,30 @@ ecg_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
                         directory="CLEAN_ECG_BIOMETRY[128.256]")
               for i in range(0,20)]
 
+ecg_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="ecg_"+str(i+1),
+                        name="ECG "+str(i+1),
+                        directory="BIOMETRY[128.512]")
+              for i in range(0, 20)]
+
+emg_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="emg_"+str(i),
+                        name="EMG "+str(i),
+                        directory="ECG_BIOMETRY[64.512]")
+              for i in (list(range(1, 6))+list(range(7, 15)))]
+
+emg_64_models_1024 = [ModelInfo(Hd=256, Sd=64, dataset_name="emg_"+str(i),
+                        name="EMG "+str(i),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in (range(1, 15))]
+
+resp_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="resp_"+str(i+1),
+                        name="RESP "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 17)]
 
 ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
                         name="ECG "+str(i+1),
                         directory="CLEAN_ECG_BIOMETRY[256.1024]")
-              for i in range(0,20)]
+              for i in range(0, 20)]
 
 ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="clean_ecg"+str(i+1),
                         name="ECG "+str(i+1),
@@ -423,6 +442,8 @@ fantasia_ecgs = [SignalInfo("ecg", 'Fantasia/ECG/mat/', 1, 900000, "ECG 1"),
                 SignalInfo("ecg", 'Fantasia/ECG/mat/', 18, 900000, "ECG 18"),
                 SignalInfo("ecg", 'Fantasia/ECG/mat/', 19, 900000, "ECG 19"),
                 SignalInfo("ecg", 'Fantasia/ECG/mat/', 20, 900000, "ECG 20")]
+
+fantasia_resp = [SignalInfo("ecg", 'Fantasia/RESP/mat/', 1, 900000, "ECG 1")]
 
 ecg_noisy_signals = [[SignalInfo("ecg noise", 'Fantasia/Noise_ECG/', i, 900000, "ECG-NOISE-"+str(j)+"-"+str(i))
                       for i in range(1,20)] for j in range(4)]

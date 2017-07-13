@@ -23,6 +23,7 @@ COLORMAP_DIRECTORY = '../data/biosig_colormap/'
 RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
 FANTASIA_ECG = 'Fantasia/ECG/mat/'
 FANTASIA_RESP = 'Fantasia/RESP/mat/'
+CYBHi_ECG = 'CYBHi/data/long-term'
 
 class ModelType:
     MINI_BATCH, SGD, CROSS_SGD, CROSS_MBSGD = range(4)
@@ -114,39 +115,81 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
-def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60):
-    # plt.plot(signal[1000:2000])
+def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60, window_rmstd=2000, confidence=0.0001):
+    # plt.figure(0)
+    # plt.plot(signal[0])
 
     signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
     # plt.figure(1)
-    # plt.plot(signal[1000:111000])
-    # # plt.show()
+    # plt.plot(signal[0])
+    # plt.show()
 
     signal = remove_moving_avg(signal, window_rmavg)
     # plt.figure(2)
-    # plt.plot(signal[1000:111000])
-    # # plt.show()
+    # plt.plot(signal[0])
+    # plt.show()
 
-    signals = remove_moving_std(signal)
+    signal = remove_moving_std(signal, window_rmstd)
 
     if len(np.shape(signal)) > 1:
         print("processing signals")
-        signalx = np.array([smooth(signal_, window_smooth) for signal_ in signals])
-        # plt.plot(signalx[0][1000:2000])
+        signalx = np.array([smooth(signal_, window_smooth) for signal_ in signal])
+        # plt.plot(signalx[0])
         # plt.show()
-        return np.array([descretitize_signal(signal_, interval_size) for signal_ in signalx])
+        return np.array([descretitize_signal(signal_, interval_size, confidence) for signal_ in signalx])
     else:
         signal = smooth(signal, window_smooth)
         # plt.figure()
         # plt.plot(signal[1000:2000])
         # plt.show()
-        ecg = descretitize_signal(signal, interval_size)
 
-        return descretitize_signal(signal, interval_size)
+        return descretitize_signal(signal, interval_size, confidence)
 
+def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, window_smooth=20, window_rmstd=1000,
+                         window_rmavg=60, confidence=0.0001):
+    # plt.figure(0)window_smooth=100, window_rmavg=3000, window_rmstd=6000
+    # plt.plot(signal[0])
+
+    signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
+    # plt.figure(1)
+    # plt.plot(signal[0])
+    # plt.show()
+
+    signal = remove_moving_avg(signal, window_rmavg)
+    # plt.figure(2)
+    # plt.plot(signal)
+    # plt.show()
+
+    signal = remove_moving_std(signal, window_rmstd)
+    # plt.plot(signal)
+    # plt.show()
+    if len(np.shape(signal)) > 1:
+        print("processing signals")
+        signal = np.array([smooth(signal_, 50) for signal_ in signal])
+    else:
+        signal = smooth(signal, window_smooth)
+
+    # plt.plot(signal)
+    # plt.show()
+
+    signal_matrix, _, _, _ = segment_signal(signal, window_size, overlap)
+    # # descretitize_signal(signal_matrix, interval_size, confidence)
+    # y=[]
+    # i = 0
+    # for signal_ in signal_matrix:
+    #     i += 1
+    #     x = descretitize_signal(signal_, interval_size, confidence)
+    #     plt.plot(x)
+    #     y.append(x)
+    #     if i % 5 == 0:
+    #         plt.show()
+    #
+    # plt.show()
+    # return np.array(y)
+    return np.array([descretitize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
 
 def descretitize_signal(signal, interval_size, confidence = 0.001):
-    n, bins, patches = plt.hist(signal, 10000)
+    n, bins = np.histogram(signal.T, 10000)
     distribution_sum = np.cumsum(n)
     MIN = bins[np.where(distribution_sum <= confidence * np.sum(n))[0][-1]]
     MAX = bins[np.where(distribution_sum >= (1-confidence) * np.sum(n))[0][0]]
@@ -158,7 +201,8 @@ def descretitize_signal(signal, interval_size, confidence = 0.001):
     signal = np.around(signal / np.max(signal), decimals)   # made a discrete representation of the signal
     signal *= (interval_size - 1)                       # with "interval_size" steps (min = 0, max = interval_size-1))
     # signal = np.around(signal)
-    plt.clf()
+    # plt.clf()
+
     return signal.astype(int)                       # insert signal into an array of signals
 
 
@@ -182,32 +226,35 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
 
 def remove_moving_avg(signal, window_size=60):
     signalx = np.zeros_like(signal)
-    for i in range(len(signal)):
+
+    for i in range(np.shape(signal)[-1]):
         n = [int(i - window_size/2), int(window_size/2 + i)]
 
-        # if n[0] < 0:
-        #     n[0] = 0
-        if n[1] > len(signal):
-            n[1] -= len(signal)
+        if n[1] > np.shape(signal)[-1]:
+            n[1] -= np.shape(signal)[-1]
 
-        if len(signal[n[0]:n[1]]) > 0:
-            signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]], axis=0))
+        if np.shape(signal[n[0]:n[1]])[-1] > 0:
+            if len(np.shape(signal)) == 1:
+                signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]], axis=0))
+            else:
+                signalx[:, n[0]:n[1]] = (signal[:, n[0]:n[1]] - np.mean(signal[:, n[0]:n[1]], axis=0))
 
     return signalx
 
 
 def remove_moving_std(signal, window_size=2000):
     signalx = np.zeros_like(signal)
-    for i in range(len(signal)):
-        n = [int(i - window_size / 2), int(window_size / 2 + i)]
+    for i in range(np.shape(signal)[-1]):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
 
-        # if n[0] < 0:
-        #     n[0] = 0
         if n[1] > len(signal):
             n[1] -= len(signal)
 
-        if len(signal[n[0]:n[1]]) > 0:
-            signalx[n[0]:n[1]] = signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]], axis=0)
+        if np.shape(signal[n[0]:n[1]])[-1] > 0:
+            if len(np.shape(signal)) == 1:
+                signalx[n[0]:n[1]] = (signal[n[0]:n[1]] / np.std(signal[n[0]:n[1]], axis=0))
+            else:
+                signalx[:, n[0]:n[1]] = (signal[:, n[0]:n[1]] / np.std(signal[:, n[0]:n[1]], axis=0))
 
     return signalx
 
@@ -224,8 +271,11 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_E
     for file_path in full_paths:
         signal = sio.loadmat(file_path)['val'][0]
         # signal = (signal - np.mean(signal)) / np.std(signal)
-        if dataset_dir.count(FANTASIA_RESP)>0:
-            signals.append(process_dnn_signal(signal, signal_dim, 100, 1000))
+        if dataset_dir.count(FANTASIA_RESP) > 0:
+            signals.append(process_dnn_signal(signal, signal_dim,
+                                              window_smooth=100, window_rmavg=3000, window_rmstd=6000))
+            # segments.append(process_dnn_segments(signal, signal_dim, window_size=1024, overlap=0.33,
+            #                                      window_smooth=100, window_rmavg=3000, window_rmstd=6000, confidence=0.0001))
         else:
             signals.append(process_dnn_signal(signal, signal_dim))
 
@@ -238,6 +288,48 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_E
             plt.figure(2)
             plt.plot(signals[-1][1000:1000+peak_into_data])
             plt.show()
+
+    y_train = np.zeros(len(signals)).tolist()
+    print("Signal acquired")
+    for i in range(len(signals)):
+        y_train[i] = signals[i][1:] + [0]
+
+    return signals, y_train
+
+def get_fmh_emg_datset(signal_dim, example_index_array=None, dataset_dir="FMH", row=7, peak_into_data=False):
+    directory = RAW_SIGNAL_DIRECTORY + dataset_dir
+    full_paths = os.listdir(directory)
+    skiprows=0
+    try:
+        numbers = [int(file_path[1:-8]) for file_path in full_paths]
+        full_paths = sort_by_key(numbers, full_paths)
+
+        if example_index_array is not None:
+            full_paths = full_paths[example_index_array]
+        elif len(example_index_array) == 1:
+            full_paths = [full_paths[example_index_array]]
+    except:
+        skiprows = 7
+        pass
+
+    signals = []
+    for file_path in full_paths:
+        signal = np.loadtxt(directory + '/' + file_path, skiprows=skiprows)[:, row]
+        plt.plot(signal)
+        plt.show()
+        i = 0
+        step = 1000
+        signal_average = np.mean(abs(signal - np.mean(signal)))
+        for s in range(int(len(signal)*0.85), len(signal), step):
+            if np.mean(np.abs(signal[s:s + 2000] - np.mean(signal[s:s + 2000]))) < signal_average * 0.2:
+                signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:s-step], 4),
+                                                  signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
+                                                  confidence=0.01))
+                break
+            elif s >= len(signal) -step:
+                signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:], 4),
+                                                  signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
+                                                  confidence=0.01))
 
     y_train = np.zeros(len(signals)).tolist()
     print("Signal acquired")
@@ -267,7 +359,75 @@ def get_fantasia_full_paths(dataset_dir, example_index_array):
     return full_paths
 
 
-def get_cyb_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
+def get_cyb_dataset_files(signal_dim, dataset_dir=CYBHi_ECG, peak_into_data=False, confidence=0.001):
+    train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
+        get_cyb_dataset_raw_files(dataset_dir=dataset_dir)
+
+    processed_train_signals = []
+    processed_test_signals = []
+
+    for train_signal, test_signal, i in zip(train_signals, test_signals, range(len(test_signals))):
+        try:
+            train_signal = process_dnn_signal(train_signal, signal_dim, window_rmavg=40, confidence=confidence)
+            test_signal = process_dnn_signal(test_signal, signal_dim, window_rmavg=40, confidence=confidence)
+
+            processed_train_signals.append(train_signal)
+            processed_test_signals.append(test_signal)
+            if peak_into_data == True:
+                plt.plot(train_signal)
+                plt.plot(test_signal)
+                plt.show()
+            print("Processed: {0}".format())
+        except ValueError:
+            print("Error")
+            pass
+
+    return train_dates, train_names, train_signals, test_dates, test_names, test_signals
+
+def get_cyb_dataset_segmented(signal_dim, window_size=1024, dataset_dir=CYBHi_ECG, peak_into_data=False, confidence=0.001):
+    # train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
+    #     get_cyb_dataset_raw_files(dataset_dir=dataset_dir)
+    # np.savez("../data/raw.npz", train_dates=train_dates, train_names=train_names, train_signals=train_signals,
+    #                   test_dates=test_dates, test_names=test_names, test_signals=test_signals)
+    npzfile = np.load("../data/raw.npz")
+    train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
+        npzfile['train_dates'], npzfile['train_names'], npzfile['train_signals'], npzfile['test_dates'], \
+        npzfile['test_names'], npzfile['test_signals']
+
+    processed_train_signals = []
+    processed_test_signals = []
+
+    for train_signal, test_signal, train_name in zip(train_signals, test_signals, train_names):
+        try:
+            train_matrix = process_dnn_segments(train_signal, signal_dim, window_size, overlap=0.11, window_rmavg=40,
+                                                confidence=confidence)
+            test_matrix = process_dnn_segments(test_signal, signal_dim, window_size, overlap=0.11, window_rmavg=40,
+                                               confidence=confidence)
+            processed_train_signals.append(train_matrix)
+
+            processed_test_signals.append(test_matrix)
+
+            if peak_into_data == True:
+                i = 1
+                for train, test in zip(train_matrix, test_matrix):
+                    plt.subplot(4, 2, i)
+                    plt.plot(train)
+                    plt.plot(test)
+                    if i != 0 and i % 8 == 0:
+                        i = 1
+                        plt.show()
+                    else:
+                        i += 1
+                plt.show()
+            print("Processed: {0}".format(train_name))
+        except ValueError:
+            print("Error")
+            pass
+
+    return train_dates, train_names, processed_train_signals, test_dates, test_names, processed_test_signals
+
+def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG):
+    dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
     full_paths = os.listdir(dataset_dir)
     train_signals = []
     test_signals = []
@@ -287,13 +447,15 @@ def get_cyb_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG
 
 
                 signal = np.loadtxt(file)
+                signal = sig.decimate(signal, 4)
                 N = len(signal)
                 time = len(signal)/fs
-                # iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
-                # t = np.arange(0, time-1/500, 1/500)
-                # signal = iter_(t)
-                signal = sig.decimate(signal, 4)
-                signal = process_dnn_signal(signal, signal_dim)
+
+                for sample, i in zip(signal, range(len(signal))):
+                    if sample != 0:
+                        signal = signal[i:]
+                        break
+
                 if train_names.count(name) == 0:
                     train_signals.append(signal)
                     train_names.append(name)
@@ -302,21 +464,30 @@ def get_cyb_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG
                     test_signals.append(signal)
                     test_names.append(name)
                     test_dates.append(date)
-                #
-                #         if peak_into_data:
-                if peak_into_data == True:
-                    peak_into_data = 1000
-                    plt.plot(signal[1000:1000+peak_into_data])
-                    plt.show()
+
                 print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
             except ValueError:
                 print("Error")
                 pass
+    train_indexes = sorted(range(len(train_names)), key=lambda k: train_names[k])
+    test_indexes = sorted(range(len(test_names)), key=lambda k: test_names[k])
 
-    return train_dates, train_names, train_signals, test_dates, test_names, test_signals
+    return np.array(train_dates)[train_indexes], \
+           np.array(train_names)[train_indexes], \
+           np.array(train_signals)[train_indexes],\
+           np.array(test_dates)[test_indexes], \
+           np.array(test_names)[test_indexes], \
+           np.array(test_signals)[test_indexes]
 
 
-def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False):
+def sort_index_by_key(key_array):
+    return sorted(range(len(key_array)), key=lambda k: key_array[k])
+
+
+def sort_by_key(key_array, array_2_sort):
+    return np.array(array_2_sort)[sort_index_by_key(key_array)]
+
+def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False, confidence=0.001):
     full_paths = os.listdir(dataset_dir)
     signals = []
     fs = 360
@@ -332,7 +503,7 @@ def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG
                 t = np.arange(0, time-1/500, 1/500)
                 signal = iter_(t)
                 signal = sig.decimate(signal, 2)
-                signal = process_dnn_signal(signal, signal_dim)
+                signal = process_dnn_signal(signal, signal_dim, confidence)
                 signals.append(signal)
                 #
                 #         if peak_into_data:
@@ -542,7 +713,7 @@ def plot_gru_simple(model, original_data, predicted_signal, signal_probabilities
     ax1.set_title("Original signal example")
     ax1.set_ylabel('k')
     ax1.set_xlabel('n')
-    ax2.set_title("Dreamed signal - training time: {0} milisec".format(model.train_time))
+    ax2.set_title("Synthesized signal example")
     ax2.set_ylabel('k')
     ax2.set_xlabel('n')
 
@@ -558,13 +729,16 @@ def plot_gru_simple(model, original_data, predicted_signal, signal_probabilities
         Z_grid, X_grid, Y_grid = create_grid_for_graph(signal_probabilities, 0.1)
         norm = mpl.colors.Normalize(vmin=np.min(Z_grid[~np.isnan(Z_grid)]), vmax=np.max(Z_grid[~np.isnan(Z_grid)]))
         im1 = ax2.imshow(Z_grid, interpolation='spline16',
-                         extent=[0, len(predicted_signal), 0, model.signal_dim],
+                         extent=[0, len(predicted_signal), 0, model.Sd],
                          cmap=mpl.cm.BuPu, norm=norm, aspect='auto', origin='lower', alpha=0.5)
         ax2.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
         ax2.get_yaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
         fig.colorbar(im1, cax=cax2)
 
     plt.subplots_adjust(0.04, 0.04, 0.94, 0.96, 0.08, 0.14)
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.savefig("img/PREDICTED_{0}.eps".format(model.dataset_name), format='eps', dpi=50)
     plt.show()
 
 
@@ -647,6 +821,9 @@ def plot_gru_data(model, original_data, predicted_signal, signal_probabilities, 
     fig.colorbar(im2, cax=cax3)
 
     plt.subplots_adjust(0.04, 0.04, 0.94, 0.96, 0.08, 0.14)
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.savefig("img/PREDICTED_{0}.eps".format(model.dataset_name), format='eps', dpi=50)
     plt.show()
 
 
@@ -880,7 +1057,9 @@ def plot_past_gru_data(predicted_signals, predicted_names):
             axis.set_xlabel('n')
             axis.set_title(predicted_names[i])
 
-    # fig.tight_layout()
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.savefig("img/history.eps", format='eps', dpi=100)
     plt.show()
 
 
