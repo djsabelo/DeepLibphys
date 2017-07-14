@@ -41,7 +41,7 @@ def create_history(subject):
         print("Processing epoch " + str(epoch))
         for i in range(N):
             # print(i)
-            signal.append(model.generate_online_predicted_signal(signal, window_size, uncertaintly=0.05))
+            signal.append(model.generate_online_predicted_signal(signal, window_size, uncertainty=0.05))
             x.append((i+1)/fz)
 
         titles.append("Epoch {0}".format(epoch))

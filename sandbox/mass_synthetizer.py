@@ -38,7 +38,7 @@ def synthetize(models, uncertaintly=0.01, filename="synthesized_signals_1024.npz
         # while True:
         for i in range(N):
             # print(i)
-            signal.append(model.generate_online_predicted_signal(signal, window_size, uncertaintly=uncertaintly))
+            signal.append(model.generate_online_predicted_signal(signal, window_size, uncertainty=uncertaintly))
         plt.clf()
         plt.plot(signal)
         plt.pause(0.05)

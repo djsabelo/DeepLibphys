@@ -150,7 +150,7 @@ class LibphysSGDGRU(LibphysGRU):
 
         return new_signal[1:]
 
-    def generate_online_predicted_signal(self, starting_signal, window_seen_by_GRU_size, uncertaintly=0.05):
+    def generate_online_predicted_signal(self, starting_signal, window_seen_by_GRU_size, uncertainty=0.05):
         new_signal = starting_signal
         next_sample = None
         try:
@@ -166,7 +166,7 @@ class LibphysSGDGRU(LibphysGRU):
             means = np.where(next_sample_probs > 0.01)[0]
             xxx = np.zeros(64)
             for mean_ in means:
-                xxx += norm.pdf(np.arange(64), mean_, uncertaintly) * next_sample_probs[mean_]
+                xxx += norm.pdf(np.arange(64), mean_, uncertainty) * next_sample_probs[mean_]
 
             xxx = xxx / np.sum(xxx)
             # next_sample_probs = np.random.multinomial(1, next_sample_probs)

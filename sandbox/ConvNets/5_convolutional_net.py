@@ -14,6 +14,13 @@ def floatX(X):
 def init_weights(shape):
     return theano.shared(floatX(np.random.randn(*shape) * 0.01))
 
+def init_weights_x(shape):
+    # Xavier Glorot initialization
+    n1, n2 = shape[0], shape[3]
+    receptive_field = shape[1] * shape[2]
+    std = 2.0 / np.sqrt((n1+n2)*receptive_field)
+    return theano.shared(floatX(np.random.randn(*shape) * std))
+
 def rectify(X):
     return T.maximum(X, 0.)
 
@@ -39,33 +46,26 @@ def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
         updates.append((acc, acc_new))
         updates.append((p, p - lr * g))
     return updates
-def SGD(cost, params, lr=0.1):
+
+def SGD(cost, params, lr=0.01, decay=1e-6, momentum=0.9, nesterov=True):
     grads = T.grad(cost=cost, wrt=params)
     updates = []
+    niter = theano.shared(floatX(0.))
+    lr *= 1. / (1. + decay * niter) # niter as global
+    #shapes = [T.shape(p) for p in params]
+    moments = [T.zeros_like(shape) for shape in shapes]
     #noise = theano.shared(np.float32(np.random.randn() * 0.001), 'noise')
-    for p, g in zip(params, grads):
-        #acc = theano.shared(p.get_value() * 0.)
-        #acc_new = rho * acc + (1 - rho) * g ** 2
-        #gradient_scaling = T.sqrt(acc_new + epsilon)
-        #g = g / gradient_scaling
-        #updates.append((acc, acc_new))
-        updates.append((p, p - lr * g))
+    # self.w,... = niter + moments
+    for p, g, m in zip(params, grads, moments):
+        v = momentum * m - lr * g
+        updates.append((m, v))
+        if nesterov:
+            new_p = p + momentum * v - lr * g
+        else:
+            new_p = p + v
+        updates.append((p, new_p))
+    niter += 1
     return updates
-'''0.9669
-0.9774
-0.9857
-0.9864
-0.9866
-0.9882
-0.9875
-0.9891
-0.9861
-0.9855
-0.9884
-0.9884
-0.9853
-0.9896
-0.9874'''
 
 
 def Adam(cost, params, lr=0.001, beta1=0.9, beta2=.999, epsilon=1e-6):
@@ -119,14 +119,14 @@ teX = teX.reshape(-1, 1, 28, 28)
 X = T.ftensor4()
 Y = T.fmatrix()
 
-w = init_weights((32, 1, 3, 3))
-w2 = init_weights((64, 32, 3, 3))
-w3 = init_weights((128, 64, 3, 3))
+w = init_weights_x((32, 1, 3, 3))
+w2 = init_weights_x((64, 32, 3, 3))
+w3 = init_weights_x((128, 64, 3, 3))
 w4 = init_weights((128 * 3 * 3, 625))
 w_o = init_weights((625, 10))
 
 noise_l1, noise_l2, noise_l3, noise_l4, noise_py_x = model(X, w, w2, w3, w4, 0.2, 0.5)
-l1, l2, l3, l4, py_x = model(X, w, w2, w3, w4, 0., 0.)
+py_x = model(X, w, w2, w3, w4, 0., 0.)[4]
 y_x = T.argmax(py_x, axis=1)
 
 

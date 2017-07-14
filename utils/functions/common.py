@@ -17,10 +17,10 @@ import sys
 
 import DeepLibphys.models.libphys_GRU as GRU
 
-DATASET_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/'
+DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/'
 TRAINED_DATA_DIRECTORY = '../data/trained/'
 COLORMAP_DIRECTORY = '../data/biosig_colormap/'
-RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
+RAW_SIGNAL_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/'
 FANTASIA_ECG = 'Fantasia/ECG/mat/'
 FANTASIA_RESP = 'Fantasia/RESP/mat/'
 
@@ -115,6 +115,14 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
 
 
 def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60):
+    """
+
+    :param signal:
+    :param interval_size:
+    :param window_smooth:
+    :param window_rmavg:
+    :return:
+    """
     # plt.plot(signal[1000:2000])
 
     signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
@@ -134,18 +142,60 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60)
         signalx = np.array([smooth(signal_, window_smooth) for signal_ in signals])
         # plt.plot(signalx[0][1000:2000])
         # plt.show()
-        return np.array([quantitize_signal(signal_, interval_size) for signal_ in signalx])
+        return np.array([quantize_signal(signal_, interval_size) for signal_ in signalx])
     else:
         signal = smooth(signal, window_smooth)
         # plt.figure()
         # plt.plot(signal[1000:2000])
         # plt.show()
-        ecg = quantitize_signal(signal, interval_size)
+        # ecg = quantize_signal(signal, interval_size)
 
-        return quantitize_signal(signal, interval_size)
+        return quantize_signal(signal, interval_size)
+
+def process_cnn_signal(signal, window_smooth=10, window_rmavg=60):
+    """
+
+    :param signal:
+    :param interval_size:
+    :param window_smooth:
+    :param window_rmavg:
+    :return:
+    """
+    # plt.plot(signal[1000:2000])
+
+    signal = (signal - np.mean(signal, axis=0)) / np.std(signal, axis=0)
+    # plt.figure(1)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
+
+    signal = remove_moving_avg(signal, window_rmavg)
+    # plt.figure(2)
+    # plt.plot(signal[1000:111000])
+    # # plt.show()
+
+    signals = remove_moving_std(signal)
+
+    return smooth(signal, window_smooth)
+    # if len(np.shape(signal)) > 1:
+    #     print("processing signals")
+    #     return np.array([smooth(signal_, window_smooth) for signal_ in signals])
+    # else:
+    #     return smooth(signal, window_smooth)
 
 
-def quantitize_signal(signal, interval_size, confidence = 0.001):
+def quantize_signal(signal, interval_size, confidence = 0.001):
+    """
+    Transform the signal's continuous values into discrete ones, given the interval size, in order to reduce its
+    dimensionality
+    :param signal: numpy array of floats
+        Array of numbers that symbolize the signal that must be quantized to serve as input to the Deep Neural Networks.
+    :param interval_size: int
+        Number of discrete values attained by the signal
+    :param confidence: float
+        Percentage of the accepted observations from the histogram. The edge values which fall below the confidence
+        are removed.
+    :return: numpy array of ints
+    """
     n, bins, patches = plt.hist(signal, 10000)
     distribution_sum = np.cumsum(n)
     MIN = bins[np.where(distribution_sum <= confidence * np.sum(n))[0][-1]]
@@ -153,13 +203,12 @@ def quantitize_signal(signal, interval_size, confidence = 0.001):
     signal[signal >= MAX] = MAX
     signal[signal <= MIN] = MIN
 
-    decimals = len(str(int(interval_size)))
-    signal -= np.min(signal)                                # removed the minimum value
-    signal = np.around(signal / np.max(signal), decimals)   # made a discrete representation of the signal
+    signal -= np.min(signal)                            # removed the minimum value
+    signal = signal/np.max(signal)                      # made a discrete representation of the signal
     signal *= (interval_size - 1)                       # with "interval_size" steps (min = 0, max = interval_size-1))
     # signal = np.around(signal)
     plt.clf()
-    return signal.astype(int)                       # insert signal into an array of signals
+    return np.around(signal, 0).astype(np.int)            # insert signal into an array of signals
 
 
 def process_web_signal(signal, interval_size, smooth_window, peak_into_data, decimate=None, window=1, smooth_type='hanning'):
@@ -246,9 +295,13 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_E
 
     return signals, y_train
 
-def get_fantasia_full_paths(dataset_dir, example_index_array):
+def get_fantasia_full_paths(dataset_dir=FANTASIA_ECG, example_index_array=None):
+    if example_index_array is None:
+        example_index_array = np.arange(1,21)
+    else:
+        example_index_array = np.asarray(example_index_array)
+
     full_paths = np.zeros(len(example_index_array)).tolist()
-    example_index_array = np.asarray(example_index_array)
     i = 0
     for example in example_index_array:
         file_name = ''
