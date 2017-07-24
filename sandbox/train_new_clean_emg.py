@@ -87,20 +87,20 @@ def train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_direc
             returned = model.train(signal, signal2model, overlap=0.10)
 
 signal_dim = 64
-hidden_dim = 256
+hidden_dim = 512
 mini_batch_size = 16
 batch_size = 128
 window_size = 1024
 save_interval = 1000
-signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+signal_directory = 'SYNTHESIS[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = np.array([2, 14]) - 1
+indexes = np.arange(2, 14) - 1
 
 print("Loading signals...")
-x_train, y_train = get_fmh_emg_datset(signal_dim, dataset_dir="EMG_Lower", row=0)
+# x_train, y_train = get_fmh_emg_datset(signal_dim, dataset_dir="EMG_Lower", row=0)
 # np.savez("../data/FMH_[64].npz", x_train=x_train, y_train=y_train)
-# x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
-print(len(x_train))
+x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
+# print(len(x_train))
 
 train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
                signal_dim)

@@ -41,15 +41,18 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
         model = GRU.LibphysSGDGRU(signal2model)
         model.train_block(group_signals, signal2model, n_for_each=1)
     for j in range(len(group_signals)):
-        train_group = group_signals
-        train_group.pop(j)
+        if i == 0 and j < 16:
+            pass
+        else:
+            train_group = group_signals
+            train_group.pop(j)
 
-        model_name = 'day_hrv_rr_{0}_{1}'.format(i, j)
-        signal2model.model_name = model_name
-        running_ok = False
-        while not running_ok:
-            model = GRU.LibphysSGDGRU(signal2model)
-            running_ok = model.train_block(train_group, signal2model, n_for_each=1)
+            model_name = 'day_hrv_rr_{0}_{1}'.format(i, j)
+            signal2model.model_name = model_name
+            running_ok = False
+            while not running_ok:
+                model = GRU.LibphysSGDGRU(signal2model)
+                running_ok = model.train_block(train_group, signal2model, n_for_each=1)
 
 
 

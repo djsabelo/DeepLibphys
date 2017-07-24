@@ -27,7 +27,7 @@ noisy_data = ['ABD', 'AG', 'AR', 'ARF', 'CB', 'DC', 'JB', 'GF', 'JCA', 'JN', 'MB
 print("Training {0} of {1}".format(len(train_dates) - len(noisy_data), len(train_dates)))
 signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-z = 2
+z = 4
 for i, signal, person_name in zip(range(z, len(train_signals)), train_signals[z:], train_names[z:]):
     if noisy_data.count(person_name) == 0:
         name = 'ecg_cybhi_' + person_name

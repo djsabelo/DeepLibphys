@@ -244,7 +244,7 @@ if __name__ == "__main__":
     window_size = 256
     fs = 250
 
-    models = db.ecg_64_models + db.resp_64_models + db.emg_64_models
+    models = db.ecg_64_models + db.resp_64_models + db.emg_64_1024_models
     signals = np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist() + \
               np.load("../data/Fantasia_RESP_[64].npz")['x_train'].tolist() + \
               np.load("../data/FMH_[64].npz")['x_train'].tolist()
@@ -259,53 +259,54 @@ if __name__ == "__main__":
 
     loss_tensor = []
     filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH"
-    # loss_tensor = calculate_loss_tensor(filename, N_Windows, W, models, signals, overlap=0.11)
+    loss_tensor = calculate_loss_tensor(filename, N_Windows, W, models, signals, overlap=0.11)
 
     if len(loss_tensor) < 1:
         loss_tensor = np.load(filename + ".npz")["loss_tensor"]
 
-    labels_true = labels_pred = ["ECG {0}".format(i) for i in range(1, 21)] + \
-                                ["RESP {0}".format(i) for i in range(1, 21)] + \
-                                ["EMG {0}".format(i) for i in (range(1, 15))]
+    labels_true = [mod.name for mod in models]
+    labels_pred = ["ECG {0}".format(i) for i in range(1, 20)] + \
+                  ["RESP {0}".format(i) for i in range(1, 20)] + \
+                  ["EMG {0}".format(i) for i in (range(1, 15))]
 
     confusion_mean = np.mean(loss_tensor, axis=2)
     plot_confusion_matrix(confusion_mean, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Reds,
-                          cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None)
+                          cmap_text=plt.cm.Reds_r, no_numbers=False, norm=True, N_Windows=0.1)
 
     confusion_std = np.std(loss_tensor, axis=2)
     plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Blues,
                           cmap_text=plt.cm.Blues_r, no_numbers=False, norm=False, N_Windows=np.max(confusion_std))
 
-    ecg_signals_index = list(range(1, 7)) + list(range(9, 19))
-    resp_signals_index = list(range(20, 40))
-    emg_signals_index = list(range(40, np.shape(loss_tensor)[1]))
-
-    ecg_loss_tensor = loss_tensor[list(range(0, 19))] #/ np.max(loss_tensor[list(range(0, 19))], axis=1)
-    resp_loss_tensor = loss_tensor[list(range(20, 37))] #/ np.max(loss_tensor[list(range(20, 37))], axis=1)
-    emg_loss_tensor = loss_tensor[list(range(37, np.shape(loss_tensor)[0]))]
-    #emg_loss_tensor = emg_loss_tensor / np.max(emg_loss_tensor, axis=1)
-
-    mean_loss_per_type = np.zeros((3, 3))
-    std_loss_per_type = np.zeros((3, 3))
-
-    mean_loss_per_type[0,0], mean_loss_per_type[0,1], mean_loss_per_type[0,2] = \
-        np.mean(ecg_loss_tensor[:, ecg_signals_index]), \
-        np.mean(ecg_loss_tensor[:, resp_signals_index]), \
-        np.mean(ecg_loss_tensor[:, emg_signals_index])
-    mean_loss_per_type[1, 0], mean_loss_per_type[1, 1], mean_loss_per_type[1, 2] = \
-        np.mean(resp_loss_tensor[:, ecg_signals_index]), \
-        np.mean(resp_loss_tensor[:, resp_signals_index]), \
-        np.mean(resp_loss_tensor[:, emg_signals_index])
-    mean_loss_per_type[2, 0], mean_loss_per_type[2, 1], mean_loss_per_type[2, 2] = \
-        np.mean(emg_loss_tensor[:, ecg_signals_index]), \
-        np.mean(emg_loss_tensor[:, resp_signals_index]), \
-        np.mean(emg_loss_tensor[:, emg_signals_index])
-
-    # for j in range(np.shape(mean_loss_per_type)[1]):
-    #     mean_loss_per_type[:, j] = mean_loss_per_type[:, j] / np.max(mean_loss_per_type[:, j])
-
-
-    print(mean_loss_per_type)
-    confusion_mean = np.mean(loss_tensor, axis=2)
-    plot_confusion_matrix(mean_loss_per_type, ["ECG", "RESP", "EMG"], ["ECG", "RESP", "EMG"], title='Error per type',
-                          cmap=plt.cm.Reds, cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=None)
+    # ecg_signals_index = list(range(1, 7)) + list(range(9, 19))
+    # resp_signals_index = list(range(20, 40))
+    # # emg_signals_index = list(range(40, np.shape(loss_tensor)[1]))
+    #
+    # ecg_loss_tensor = loss_tensor[list(range(0, 19))] #/ np.max(loss_tensor[list(range(0, 19))], axis=1)
+    # resp_loss_tensor = loss_tensor[list(range(20, 39))] #/ np.max(loss_tensor[list(range(20, 37))], axis=1)
+    # # emg_loss_tensor = loss_tensor[list(range(39, np.shape(loss_tensor)[0]))]
+    # #emg_loss_tensor = emg_loss_tensor / np.max(emg_loss_tensor, axis=1)
+    #
+    # mean_loss_per_type = np.zeros((3, 3))
+    # std_loss_per_type = np.zeros((3, 3))
+    #
+    # mean_loss_per_type[0,0], mean_loss_per_type[0,1], mean_loss_per_type[0,2] = \
+    #     np.mean(ecg_loss_tensor[:, ecg_signals_index]), \
+    #     np.mean(ecg_loss_tensor[:, resp_signals_index]), \
+    #     np.mean(ecg_loss_tensor[:, emg_signals_index])
+    # mean_loss_per_type[1, 0], mean_loss_per_type[1, 1], mean_loss_per_type[1, 2] = \
+    #     np.mean(resp_loss_tensor[:, ecg_signals_index]), \
+    #     np.mean(resp_loss_tensor[:, resp_signals_index]), \
+    #     np.mean(resp_loss_tensor[:, emg_signals_index])
+    # mean_loss_per_type[2, 0], mean_loss_per_type[2, 1], mean_loss_per_type[2, 2] = \
+    #     np.mean(emg_loss_tensor[:, ecg_signals_index]), \
+    #     np.mean(emg_loss_tensor[:, resp_signals_index]), \
+    #     np.mean(emg_loss_tensor[:, emg_signals_index])
+    #
+    # # for j in range(np.shape(mean_loss_per_type)[1]):
+    # #     mean_loss_per_type[:, j] = mean_loss_per_type[:, j] / np.max(mean_loss_per_type[:, j])
+    #
+    #
+    # print(mean_loss_per_type)
+    # confusion_mean = np.mean(loss_tensor, axis=2)
+    # plot_confusion_matrix(mean_loss_per_type, ["ECG", "RESP", "EMG"], ["ECG", "RESP", "EMG"], title='Error per type',
+    #                       cmap=plt.cm.Reds, cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=None)

@@ -216,7 +216,7 @@ class LibphysGRU:
         # print(y_train)
         loss = [self.calculate_total_loss(x_train, y_train)]
         lower_error_threshold, higher_error_threshold = [10**(-5), 1]
-        lower_error = 10**(-3)
+        lower_error = 10**(-6)
         lower_learning_rate = 10**(-5)
         count_to_break = 0
         count_up_slope = 0

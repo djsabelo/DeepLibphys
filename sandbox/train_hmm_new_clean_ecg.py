@@ -104,7 +104,7 @@ x_train, y_train = np.load("../data/FANTASIA_ECG[64].npz")['x_train'], np.load("
 # joblib.load("filename.pkl")
 
 i = 0
-for signal in x_train:
+for signal in x_train[0]:
     i += 1
     print(i)
     X = signal[11000:int(11000+(512*128*0.33))].reshape(-1, 1)
