@@ -131,12 +131,10 @@ class LibphysMBGRU(LibphysGRU):
     def calculate_loss(self, X, Y):
         return self.calculate_total_loss(X, Y)
 
-    def generate_predicted_signal(self, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
-        signal2model = Signal2Model(self.model_name, self.get_directory_tag(), signal_dim=self.signal_dim,
-                                    hidden_dim=self.hidden_dim, signal_type=self.signal_type, model_type=ModelType.SGD)
-
+    def generate_predicted_signal(self, signal2model, N=2000, starting_signal=[0], window_seen_by_GRU_size=256):
+        signal2model.model_type = ModelType.SGD
         model = LibphysSGDGRU.LibphysSGDGRU(signal2model)
-        model.load(self.model_name, filetag=self.get_file_tag(-5,-5))
+        model.load(dir_name=signal2model.signal_directory, file_tag=self.get_file_tag(-5,-5))
 
         return model.generate_predicted_signal(N, starting_signal, window_seen_by_GRU_size)
 

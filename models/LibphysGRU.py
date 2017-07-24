@@ -10,7 +10,7 @@ import theano
 import theano.tensor as T
 import matplotlib.pyplot as plt
 
-GRU_DATA_DIRECTORY = "/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/"
+GRU_DATA_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/"
 
 
 class LibphysGRU:
@@ -337,7 +337,7 @@ class LibphysGRU:
         """
         Saves the model according to the file_tag
         :param dir_name: -string - directory name where the corresponding to the model for saving is
-                            -> may use model.get_directory_tag(dirctory_name, batch_size, window_size)
+                            -> may use model.get_directory_tag(directory_name, batch_size, window_size)
                             -> if given None it will have the value model.get_directory_tag(model_name, 0, 0)
 
         :param file_tag: - string - file_tag corresponding to the model for loading
