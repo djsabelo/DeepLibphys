@@ -314,29 +314,36 @@ def get_fmh_emg_datset(signal_dim, example_index_array=None, dataset_dir="FMH", 
 
     signals = []
     for file_path in full_paths:
-        signal = np.loadtxt(directory + '/' + file_path, skiprows=skiprows)[:, row]
-        plt.plot(signal)
-        plt.show()
+        signalx = np.loadtxt(directory + '/' + file_path, skiprows=skiprows)
+        signal = signalx[:, row]
+        emg = signalx[:, 7]
+        emgs = []
+        signal = scp.signal.decimate(signal, 4)
+        # plt.plot(signal)
+        # plt.show()
         i = 0
         step = 1000
-        signal_average = np.mean(abs(signal - np.mean(signal)))
+
         for s in range(int(len(signal)*0.85), len(signal), step):
-            if np.mean(np.abs(signal[s:s + 2000] - np.mean(signal[s:s + 2000]))) < signal_average * 0.2:
-                signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:s-step], 4),
-                                                  signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
-                                                  confidence=0.01))
+            if np.mean(np.abs(emg[s:s + 2000] - np.mean(emg[s:s + 2000]))) < np.mean(abs(emg - np.mean(emg))) * 0.2:
+                # signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:s-step], 4),
+                #                                   signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
+                #                                   confidence=0.01))
+                signal_average = np.mean(abs(signal - np.mean(signal) ))
+                signals.append(smooth(signal - signal_average, 100))
+                emgs.append(emg)
                 break
-            elif s >= len(signal) -step:
-                signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:], 4),
-                                                  signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
-                                                  confidence=0.01))
+            elif s >= len(signal) - step:
+                # signals.append(process_dnn_signal(scp.signal.decimate(signal[1300:], 4),
+                #                                   signal_dim, window_smooth=10, window_rmavg=250, window_rmstd=2000,
+                #                                   confidence=0.01))
+                signal_average = np.mean(abs(signal - np.mean(signal)))
+                signals.append(smooth(signal - signal_average, 100))
+                emgs.append(emg)
 
-    y_train = np.zeros(len(signals)).tolist()
-    print("Signal acquired")
-    for i in range(len(signals)):
-        y_train[i] = signals[i][1:] + [0]
 
-    return signals, y_train
+
+    return signals, emgs
 
 def get_fantasia_full_paths(dataset_dir, example_index_array):
     full_paths = np.zeros(len(example_index_array)).tolist()
@@ -721,6 +728,57 @@ def plot_gru_simple(model, original_data, predicted_signal, signal_probabilities
 
     # PLOT AXIS 1
     ax1.plot(original_data, color="#990000")
+    ax1.legend()
+
+    # PLOT AXIS 2
+    bounds = np.arange(0, 1., 0.05).tolist()
+    ax2.plot(predicted_signal, color="#009900", alpha=0.3)  # predicted signal
+    if signal_probabilities is not None:
+        Z_grid, X_grid, Y_grid = create_grid_for_graph(signal_probabilities, 0.1)
+        norm = mpl.colors.Normalize(vmin=np.min(Z_grid[~np.isnan(Z_grid)]), vmax=np.max(Z_grid[~np.isnan(Z_grid)]))
+        im1 = ax2.imshow(Z_grid, interpolation='spline16',
+                         extent=[0, len(predicted_signal), 0, model.Sd],
+                         cmap=mpl.cm.BuPu, norm=norm, aspect='auto', origin='lower', alpha=0.5)
+        ax2.get_xaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
+        ax2.get_yaxis().set_minor_locator(mpl.ticker.AutoMinorLocator())
+        fig.colorbar(im1, cax=cax2)
+
+    plt.subplots_adjust(0.04, 0.04, 0.94, 0.96, 0.08, 0.14)
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.savefig("img/PREDICTED_{0}.eps".format(model.dataset_name), format='eps', dpi=50)
+    plt.show()
+
+def plot_gru_simple_emg(model, original_data, acc, predicted_signal, signal_probabilities=None):
+    original_data = np.asarray(original_data)
+    predicted_signal = np.asarray(predicted_signal)
+    y_lim = [np.min([np.min(original_data), np.min(predicted_signal)]) - 1,
+             np.max([np.max(original_data), np.max(predicted_signal)]) + 1]
+
+    # Prepare Figure and plots
+    fig = plt.figure()
+    gs = gridspec.GridSpec(2, 2, width_ratios=[198, 2])
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.set_ylim(y_lim)
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax2.set_ylim(y_lim)
+    # ax3 = fig.add_subplot(313, projection='3d')
+
+    ax1.set_title("Original signal example")
+    ax1.set_ylabel('k')
+    ax1.set_xlabel('n')
+    ax2.set_title("Synthesized signal example")
+    ax2.set_ylabel('k')
+    ax2.set_xlabel('n')
+
+    cax2 = fig.add_subplot(gs[1, 1])
+
+    # PLOT AXIS 1
+    ax1.plot(original_data, color="#990000")
+    ax1.plot(acc[0], color="#8A2BE2", alpha=1, label='acc x')
+    ax1.plot(acc[1], color="#00BFFF", alpha=1, label='acc y')
+    ax1.plot(acc[2], color="#B0E0E6", alpha=1, label='acc z')
+    ax1.legend()
 
     # PLOT AXIS 2
     bounds = np.arange(0, 1., 0.05).tolist()

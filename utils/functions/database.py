@@ -201,20 +201,20 @@ ecg_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="ecg_"+str(i+1),
                         directory="BIOMETRY[128.512]")
               for i in range(0, 20)]
 
-emg_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="emg_"+str(i),
+emg_64_models = [ModelInfo(Hd=512, Sd=64, dataset_name="emg_"+str(i),
                         name="EMG "+str(i),
-                        directory="ECG_BIOMETRY[64.512]")
-              for i in (list(range(1, 6))+list(range(7, 15)))]
+                        directory="SYNTHESIS[256.512]")
+              for i in (list(range(1, 15)))]
 
 emg_64_1024_models = [ModelInfo(Hd=512, Sd=64, dataset_name="emg_"+str(i),
                         name="EMG "+str(i),
-                        directory="SYNTHESIS[64.1024]")
+                        directory="SYNTHESIS[128.1024]")
               for i in (list(range(1, 15)))]
 
 resp_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="resp_"+str(i+1),
                         name="RESP "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 17)]
+              for i in range(0, 20)]
 
 ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
                         name="ECG "+str(i+1),

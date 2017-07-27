@@ -75,32 +75,99 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
 def train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
     for i, signal in zip(indexes, signals[indexes]):
         name = 'emg_' + str(i+1)
-        signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
-                                    mini_batch_size=mini_batch_size, window_size=window_size,
-                                    save_interval=save_interval)
+        signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
+                                    batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size,
+                                    save_interval=save_interval, tolerance=1e-12)
 
         returned = False
         while not returned:
             print("Compiling Model {0}".format(name))
             model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
             print("Initiating training... ")
-            returned = model.train(signal, signal2model, overlap=0.10)
+            returned = model.train(signal, signal2model, overlap=0.05)
 
+def train_other_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,
+              save_interval, signal_dim, accs):
+    for i, signal in zip(indexes, signals[indexes]):
+        name = 'emg_' + str(i + 1)
+        signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
+                                    batch_size=batch_size, mini_batch_size=mini_batch_size,
+                                    window_size=window_size,
+                                    save_interval=save_interval, tolerance=1e-12)
+
+        returned = False
+        acc = accs[i]
+        emg = signal
+        while not returned:
+            print("Compiling Model {0}".format(name))
+            model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
+            print("Initiating training... ")
+            returned = train(acc, emg, signal2model.batch_size, model, signal2model)
+
+def train(acc, emg, batch_size, model, signal2model):
+        indexes_for_cut = np.where(np.logical_and(np.diff(acc[:-1])*np.diff(acc[1:])<0,
+                                                  acc[1:-1] > 0.8*np.mean(np.abs(acc))))[0][2:-100]
+
+        indexes = [indexes_for_cut[i] for i in range(0, len(indexes_for_cut), 2)]
+        indexes_for_cut = indexes
+        max_size = int(np.mean(np.diff(indexes_for_cut)))
+        print(max_size)
+
+        X_windows = np.zeros((batch_size, max_size))
+        Y_windows = np.zeros((batch_size, max_size))
+        indexes_for_cut_train = indexes_for_cut[:int(len(indexes_for_cut)*0.33)]
+        for i, index in zip(range(batch_size), np.random.permutation(indexes_for_cut_train)[:batch_size]):
+            X_windows[i] = emg[index:index+max_size]
+            Y_windows[i] = emg[1:][index:index+max_size]
+            # plt.plot(X_windows[i])
+            # plt.show()
+
+        model.start_time = time.time()
+        t1 = time.time()
+
+        # Start training model
+        returned = model.train_model(X_windows, Y_windows, signal2model)
+        print("Dataset trained in: ~%d seconds" % int(time.time() - t1))
+
+        # Model last training is then saved
+        if returned:
+            model.save(signal2model.signal_directory, model.get_file_tag(-5, -5))
+            return True
+        else:
+            return False
+
+
+
+# 1,3,5,7,9,10,11
 signal_dim = 64
 hidden_dim = 512
-mini_batch_size = 16
-batch_size = 128
-window_size = 1024
+mini_batch_size = 4
+batch_size = 32
+window_size = 512
 save_interval = 1000
 signal_directory = 'SYNTHESIS[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = np.arange(2, 14) - 1
+indexes = np.arange(0, 14)
+# accz, emgs = get_fmh_emg_datset(20000, row=10, example_index_array=indexes)
+# np.savez('accz.pnz', accz=accz)
+accz = np.load('accz.npz')['accz']
+emgs = np.load("../data/FMH_[64].npz")['x_train']
+accs = [acc - np.mean(acc) for acc in accz]
+# accz = accz-np.min(accz)
+# accz = accz*64/np.max(accz)
+train_other_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, emgs,
+              save_interval, signal_dim, accs)
+
+# train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
+#            signal_dim)
+
 
 print("Loading signals...")
 # x_train, y_train = get_fmh_emg_datset(signal_dim, dataset_dir="EMG_Lower", row=0)
 # np.savez("../data/FMH_[64].npz", x_train=x_train, y_train=y_train)
-x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
-# print(len(x_train))
-
-train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
-               signal_dim)
+# x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
+# # print(len(x_train))
+#
+#
+# train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
+#                signal_dim)

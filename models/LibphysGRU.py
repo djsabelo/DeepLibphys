@@ -10,7 +10,7 @@ import theano
 import theano.tensor as T
 import matplotlib.pyplot as plt
 
-GRU_DATA_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/"
+GRU_DATA_DIRECTORY = "/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/"
 
 
 class LibphysGRU:
@@ -66,9 +66,18 @@ class LibphysGRU:
 
                 self.E, self.U, self.W, self.V, self.b, self.c = [], [], [], [], [], []
 
-
     def calculate_gradients(self, cost, parameters):
         return [T.grad(cost, parameter) for parameter in parameters]
+        # threshold = 1.1
+        # gradients = []
+        # for parameter in parameters:
+        #     gradient = T.grad(cost, parameter)
+        #     indexes = T.nonzero(T.gt(T.abs_(gradient * cost), threshold), True)
+        #     T.set_subtensor(gradient[indexes], \
+        #                     threshold * gradient[indexes] \
+        #                     * cost / T.abs_(gradient[indexes] * cost))
+        #     gradients.append(gradient)
+        #return gradients
 
     def get_m(self, decay, m, d):
         return decay * m + (1 - decay) * d ** 2
@@ -105,7 +114,7 @@ class LibphysGRU:
                      ], allow_input_downcast=True)
 
     def train_block(self, signals, signal2model, signal_indexes=None, n_for_each=12, overlap=0.33, random_training=True,
-                    start_index=0, track_loss=False, loss_interval=1, train_ratio=0.33):
+                    start_index=0, track_loss=False, loss_interval=1, train_ratio=0.33, validation=False):
         """
         This method embraces several datasets (or one) according to a number of records for each
 
@@ -145,9 +154,17 @@ class LibphysGRU:
                 if len(x_train) == 0:
                     x_train = signals[i][:signal2model.window_size]
                     y_train = signals[i][1:signal2model.window_size + 1]
+                    if validation:
+                        x_validation = signals[i][:signal2model.window_size]
+                        y_validation = signals[i][1:signal2model.window_size + 1]
+
                 else:
                     x_train = np.vstack((x_train, signals[i][:signal2model.window_size]))
                     y_train = np.vstack((y_train, signals[i][1:signal2model.window_size+1]))
+                    if validation:
+                        x_validation = np.vstack((x_validation, signals[i][:signal2model.window_size]))
+                        y_validation = np.vstack((y_validation, signals[i][1:signal2model.window_size+1]))
+
             else:
                 X_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][:-1], signal2model.window_size,
                                                                                 overlap=overlap, start_index=start_index)
@@ -172,15 +189,23 @@ class LibphysGRU:
                     x_train = X_windows[window_indexes[0:n_for_each], :]
                     y_train = Y_windows[window_indexes[0:n_for_each], :]
 
+                    if validation:
+                        x_validation = X_windows[window_indexes[n_for_each:n_for_each*2], :]
+                        y_validation = Y_windows[window_indexes[n_for_each:n_for_each*2], :]
+
 
                     # # The rest is for test data
                     # x_test = X_windows[last_training_index:, :]
                     # y_test = Y_windows[last_training_index:, :]
                 else:
                     x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
-                    y_train = np.append(y_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
+                    y_train = np.append(x_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
                     # x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
                     # y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
+
+                    if validation:
+                        x_validation = np.append(x_validation, X_windows[window_indexes[n_for_each:n_for_each*2], :], axis=0)
+                        y_validation = np.append(y_validation, Y_windows[window_indexes[n_for_each:n_for_each*2], :], axis=0)
 
                 # Save test data
                 # self.save_test_data(signal2model.signal_directory, [x_test, y_test])
@@ -190,8 +215,11 @@ class LibphysGRU:
         t1 = time.time()
 
         # Start training model
-        returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval)
-
+        if validation:
+            returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval,
+                                        x_validation=x_validation, y_validation=y_validation)
+        else:
+            returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval)
         print("Dataset trained in: ~%d seconds" % int(time.time() - t1))
 
         # Model last training is then saved
@@ -201,7 +229,8 @@ class LibphysGRU:
         else:
             return False
 
-    def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1, train_ratio=0.33):
+    def train(self, X, signal2model, overlap=0.33, random_training=True, start_index=0, loss_interval=1, train_ratio=0.33,
+                    validation=False):
         return self.train_block([X],
                                 signal2model, [0],
                                 signal2model.batch_size,
@@ -209,17 +238,24 @@ class LibphysGRU:
                                 random_training,
                                 start_index,
                                 loss_interval,
-                                train_ratio=train_ratio)
+                                train_ratio=train_ratio,
+                                validation=validation)
 
-    def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1):
+    def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1,
+                    x_validation=None, y_validation=None):
         # print(x_train)
         # print(y_train)
-        loss = [self.calculate_total_loss(x_train, y_train)]
+        if x_validation is None:
+            x_validation = x_train
+            y_validation = y_train
+
+        loss = [self.calculate_total_loss(x_validation, y_validation)]
         lower_error_threshold, higher_error_threshold = [10**(-5), 1]
-        lower_error = 10**(-6)
+        lower_error = 10**(-7)
         lower_learning_rate = 10**(-5)
         count_to_break = 0
         count_up_slope = 0
+        count_to_break_max = 10
         test_gradient = False
         is_nan = False
         last_parameters = self.get_parameters()
@@ -233,7 +269,7 @@ class LibphysGRU:
                 break
 
             if epoch % loss_interval == 0:
-                loss.append(self.calculate_total_loss(x_train, y_train))
+                loss.append(self.calculate_total_loss(x_validation, y_validation))
                 if epoch == 0:
                     print("Time to calculate loss: {0} ".format(time.time() - t_epoch_1))
 
@@ -257,7 +293,7 @@ class LibphysGRU:
                         last_parameters = self.get_parameters()
                         is_nan = False
 
-                    if relative_loss_gradient < 0 and epoch > 10:
+                    if relative_loss_gradient < 0:
                         count_up_slope += 1
                         if count_up_slope >= 5:
                             count_up_slope = 0
@@ -272,13 +308,13 @@ class LibphysGRU:
                     elif relative_loss_gradient > higher_error_threshold:
                         self.current_learning_rate = self.current_learning_rate * 5 / 4
                         count_to_break = 0
-                    elif relative_loss_gradient < lower_error_threshold:
+                    elif relative_loss_gradient < lower_error_threshold and epoch > 10:
                         self.current_learning_rate = self.current_learning_rate * 3 / 4
                         test_gradient = True
                         count_to_break += 1
                         print("Adjusting learning rate to lower value: " + str(self.current_learning_rate))
 
-                    if count_to_break > 5 or loss[-1] < lower_error:
+                    if count_to_break > count_to_break_max or loss[-1] < lower_error:
                         break
 
                     elif test_gradient:

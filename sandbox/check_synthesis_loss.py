@@ -70,6 +70,7 @@ def calculate_loss_tensor(filename, Total_Windows, W, signals_models, signals=No
                 x_test = X_matrix[s, w:w + n_windows, :]
                 y_test = Y_matrix[s, w:w + n_windows, :]
                 loss_tensor[m, s, w:w + n_windows] = np.asarray(model.calculate_mse_vector(x_test, y_test))
+                # loss_tensor[m, s, w:w + n_windows] = np.asarray(model.calculate_loss_vector(x_test, y_test))
 
         # if not os.path.isdir(os.path.dirname(filename + ".npz")):
         #     os.mkdir(os.path.dirname(filename + ".npz"))
@@ -81,7 +82,7 @@ def calculate_loss_tensor(filename, Total_Windows, W, signals_models, signals=No
     return loss_tensor
 
 
-def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
+def plot_emg_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
                           cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
     # plt.tight_layout()
 
@@ -96,6 +97,20 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
     plt.savefig("img/PREDICTED.eps", format='eps', dpi=50)
     plt.show()
 
+def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
+                          cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
+    # plt.tight_layout()
+
+    N = np.shape(confusion_matrix)[0]
+    fig, ax = plt.subplots()
+    ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
+                                       norm, N_Windows)
+
+    # ax = prepare_confusion_pie(ax, confusion_matrix)
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.savefig("img/PREDICTED.eps", format='eps', dpi=50)
+    plt.show()
 
 def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true, cmap,
                                   cmap_text, no_numbers, norm, N_Windows):
@@ -120,7 +135,14 @@ def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true,
     if norm:
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap, vmin=0, vmax=N_Windows)
     elif N_Windows is not None:
+        # norm = plt.Normalize(confusion_matrix.min(), confusion_matrix.max())
+        # rgba = cmap(norm(confusion_matrix))
+        # plt.imshow(rgba, interpolation='nearest', cmap=cmap, vmin=0, vmax=N_Windows)
+        # for column, i in zip(confusion_matrix.T, range(np.shape(confusion_matrix)[1])):
+        #     rgba[np.argmin(column), i, :] = 0, 1, 0, 0.2
+
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap, vmin=0, vmax=N_Windows)
+
     else:
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
 
@@ -148,22 +170,41 @@ def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true,
         # ax.grid(False)
         for i in range(len(confusion_matrix[:,0])):
             for j in range(len(confusion_matrix[0,:])):
-                value = round(confusion_matrix[i, j],2)
+                value = round(confusion_matrix[i, j],1)
                 value_ = str(value)
                 color_index = value/np.max(confusion_matrix)
                 if color_index > 0.35 or color_index > 0.65:
                     color_index = 1.0
 
-                if norm:
-                    value_ = str(int(confusion_matrix[i, j]*100)) + "%"
-                if value < 10:
-                    plt.annotate(value_, xy=(j - 0.1, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                # if norm:
+                #     value_ = str(int(confusion_matrix[i, j]))
+                # for column, i in zip(confusion_matrix.T, range(np.shape(confusion_matrix)[1])):
+                #     rgba[np.argmin(column), i, :] = 0, 1, 0, 0.2
+                if np.argmin(confusion_matrix[:, j]) == i:
+                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=10,
+                                 fontweight='bold')
+                    # ax = ax.add_subplot(111, aspect='equal')
+                    ax.add_patch(
+                        matplotlib.patches.Rectangle(
+                            (i-0.5, j-0.5),  # (x,y)
+                            0.95,  # width
+                            0.95,  # height
+                            color='#00ff99',
+                            fill=False,
+                            lw=1
+                        )
+                    )
+                elif value < 10:
+                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=10)
                 elif value < 100:
-                    plt.annotate(value_, xy=(j - 0.15, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.4, i + 0.05), color=cmap_text(color_index), fontsize=10)
                 elif value < 1000:
-                    plt.annotate(value_, xy=(j - 0.2, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=10)
                 else:
-                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=10)
+
+
+
 
     plt.draw()
     kwargs = dict(size=15, fontweight='medium')
@@ -178,7 +219,18 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     if norm:
         for i in range(np.shape(confusion_matrix)[0]):
             confusion_matrix[i] = confusion_matrix[i] / np.sum(confusion_matrix[i])
+    labels_predz = []
+    for i in range(len(labels_pred)):
+        labels_predz.append("")
+        labels_predz.append(labels_pred[i])
 
+        labels_truez = []
+    for i in range(len(labels_true)):
+        labels_truez.append("")
+        labels_truez.append(labels_true[i])
+
+    labels_true = labels_truez
+    labels_pred = labels_predz
     if norm:
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap, vmin=0, vmax=1)
     elif N_Windows is not None:
@@ -216,16 +268,15 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
                 if color_index>0.35 or color_index>0.65:
                     color_index = 1.0
 
-                if norm:
-                    value_ = str(int(confusion_matrix[i, j]*100)) + "%"
+                #     value_ = str(int(confusion_matrix[i, j]))
                 if value < 10:
-                    plt.annotate(value_, xy=(j - 0.1, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.35, i + 0.05), color=cmap_text(0.2), fontsize=10)
                 elif value < 100:
-                    plt.annotate(value_, xy=(j - 0.15, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.4, i + 0.05), color=cmap_text(0.2), fontsize=10)
                 elif value < 1000:
-                    plt.annotate(value_, xy=(j - 0.2, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(0.2), fontsize=10)
                 else:
-                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=20)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(0.2), fontsize=10)
 
     plt.draw()
     kwargs = dict(size=15, fontweight='medium')
@@ -237,45 +288,51 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
 
 if __name__ == "__main__":
     N_Windows = None
-    W = 256
+    W = 512
     signal_dim = 64
     hidden_dim = 256
     batch_size = 128
-    window_size = 256
+    window_size = 512
     fs = 250
 
-    models = db.ecg_64_models + db.resp_64_models + db.emg_64_1024_models
-    signals = np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist() + \
-              np.load("../data/Fantasia_RESP_[64].npz")['x_train'].tolist() + \
-              np.load("../data/FMH_[64].npz")['x_train'].tolist()
+    models = db.ecg_64_models #db.resp_64_models # #+ db.resp_64_models + db.emg_64_1024_models
+    signals = np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist()
+    #np.load("../data/Fantasia_RESP_[64].npz")['x_train'].tolist()
+              # + \
+              # + \
+              # np.load("../data/FMH_[64].npz")['x_train'].tolist()
     first_test_index = 0
 
-    N_Windows = 200000000000
-    for signal in signals:
-        if first_test_index != int(0.33 * len(signal)):
-            first_test_index = int(0.33 * len(signal))
-            signal_test = segment_signal(signal[first_test_index:], W, 0.11)
-            N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
+    if N_Windows is None:
+        N_Windows = 200000000000
+        for signal in signals:
+            if first_test_index != int(0.33 * len(signal)):
+                first_test_index = int(0.33 * len(signal))
+                signal_test = segment_signal(signal[first_test_index:], W, 0.33)
+                N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
 
     loss_tensor = []
-    filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH"
-    loss_tensor = calculate_loss_tensor(filename, N_Windows, W, models, signals, overlap=0.11)
+    # filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH_RESP_ENTROPY"
+    filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH_ECG_"
+    # loss_tensor = calculate_loss_tensor(filename, N_Windows, W, models, signals, overlap=0.33)
 
     if len(loss_tensor) < 1:
         loss_tensor = np.load(filename + ".npz")["loss_tensor"]
 
     labels_true = [mod.name for mod in models]
-    labels_pred = ["ECG {0}".format(i) for i in range(1, 20)] + \
-                  ["RESP {0}".format(i) for i in range(1, 20)] + \
-                  ["EMG {0}".format(i) for i in (range(1, 15))]
+    labels_pred = ["ECG {0}".format(i) for i in range(1, 21)]
+    #["ECG {0}".format(i) for i in range(1, 20)]
+                  # + \
+                  #  + \
+                  # ["EMG {0}".format(i) for i in (range(1, 15))]
 
     confusion_mean = np.mean(loss_tensor, axis=2)
-    plot_confusion_matrix(confusion_mean, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Reds,
-                          cmap_text=plt.cm.Reds_r, no_numbers=False, norm=True, N_Windows=0.1)
+    plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Reds,
+                          cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
 
     confusion_std = np.std(loss_tensor, axis=2)
-    plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Blues,
-                          cmap_text=plt.cm.Blues_r, no_numbers=False, norm=False, N_Windows=np.max(confusion_std))
+    plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
+                          cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
 
     # ecg_signals_index = list(range(1, 7)) + list(range(9, 19))
     # resp_signals_index = list(range(20, 40))

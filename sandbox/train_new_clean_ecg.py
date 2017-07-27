@@ -74,7 +74,7 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
 
 def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
     for i, signal in zip(indexes, signals[indexes]):
-        name = 'ecg_' + str(i)
+        name = 'ecg_' + str(i+1)
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
                                     save_interval=save_interval)
@@ -91,7 +91,7 @@ window_size = 512
 save_interval = 10000
 signal_directory = 'BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = [7]
+indexes = [6]
 
 print("Loading signals...")
 # signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
