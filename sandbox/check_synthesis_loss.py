@@ -168,8 +168,8 @@ def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true,
 
     if no_numbers:
         # ax.grid(False)
-        for i in range(len(confusion_matrix[:,0])):
-            for j in range(len(confusion_matrix[0,:])):
+        for i in range(len(confusion_matrix[:, 0])):
+            for j in range(len(confusion_matrix[0, :])):
                 value = round(confusion_matrix[i, j],1)
                 value_ = str(value)
                 color_index = value/np.max(confusion_matrix)
@@ -181,12 +181,12 @@ def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true,
                 # for column, i in zip(confusion_matrix.T, range(np.shape(confusion_matrix)[1])):
                 #     rgba[np.argmin(column), i, :] = 0, 1, 0, 0.2
                 if np.argmin(confusion_matrix[:, j]) == i:
-                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=10,
+                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=14,
                                  fontweight='bold')
                     # ax = ax.add_subplot(111, aspect='equal')
                     ax.add_patch(
                         matplotlib.patches.Rectangle(
-                            (i-0.5, j-0.5),  # (x,y)
+                            (j-0.5, i-0.5),  # (x,y)
                             0.95,  # width
                             0.95,  # height
                             color='#00ff99',
@@ -194,14 +194,15 @@ def prepare_confusion_error_plot(ax, confusion_matrix, labels_pred, labels_true,
                             lw=1
                         )
                     )
+
                 elif value < 10:
-                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=10)
+                    plt.annotate(value_, xy=(j - 0.25, i + 0.05), color=cmap_text(color_index), fontsize=14)
                 elif value < 100:
-                    plt.annotate(value_, xy=(j - 0.4, i + 0.05), color=cmap_text(color_index), fontsize=10)
+                    plt.annotate(value_, xy=(j - 0.4, i + 0.05), color=cmap_text(color_index), fontsize=14)
                 elif value < 1000:
-                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=10)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=14)
                 else:
-                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=10)
+                    plt.annotate(value_, xy=(j - 0.45, i + 0.05), color=cmap_text(color_index), fontsize=14)
 
 
 
@@ -286,6 +287,63 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     ax.set_xticklabels(labels_pred, rotation=90, **kwargs)
     return ax
 
+def load_loss(models, i, j):
+    return np.load(SYNTH_DIRECTORY + "/LOSS_FOR_100_SYNTH_" + \
+               models[i][0].name[:3] + "_" + models[j][0].name[:3]+".npz")["loss_tensor"]
+
+
+def get_mean_and_std_matrices(all_models, source_ind, other_ind, loss_filename):
+    loss_tensor = load_loss(all_models, source_ind, source_ind)
+
+    loss_source = np.array([loss_tensor[i, i, :] for i in range(np.shape(loss_tensor)[0])])
+    loss_type = np.array([loss_tensor[i, np.arange(np.shape(loss_tensor)[0]) != i] for i in np.arange(np.shape(loss_tensor)[0])])
+    loss = [load_loss(all_models, source_ind, other_ind[0]), load_loss(all_models, source_ind, other_ind[1])]
+    loss_other = [np.reshape(l, (np.shape(l)[0], np.shape(l)[1] * np.shape(l)[2])) for l in loss]
+    loss_other = np.append(loss_other[0],
+                           loss_other[1], axis=1)
+
+    loss_type = np.reshape(loss_type,
+                             (np.shape(loss_type)[0], np.shape(loss_type)[1] * np.shape(loss_type)[2]))
+
+    confusion_mean = np.array([np.mean(loss_source, axis=1), np.mean(loss_type, axis=1), np.mean(loss_other, axis=1)])
+    confusion_std = np.array([np.std(loss_source, axis=1), np.std(loss_type, axis=1), np.std(loss_other, axis=1)])
+
+    return confusion_mean, confusion_std
+
+
+def process_losses(i, loss_filename):
+    for models in [all_models[i]]:
+        for signal_batch, j in zip(all_signals, range(len(all_signals))):
+            filename = SYNTH_DIRECTORY + loss_filename + models[0].name[:3] + "_" + all_models[j][0].name[:3]
+            print(filename)
+            if j == 1:
+                overlap = 0.1
+            else:
+                overlap = 0.33
+
+            N_Windows = 200000000000
+            for signal in signal_batch:
+                    if first_test_index != int(0.33 * len(signal)):
+                        first_test_index = int(0.33 * len(signal))
+                        signal_test = segment_signal(signal[first_test_index:], W, overlap)
+                        N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
+
+            calculate_loss_tensor(filename, N_Windows, W, models, signal_batch, overlap=overlap)
+
+
+def process_graphs(all_models, source_index, others_indexes, loss_filename, name):
+    labels_pred = [mod.name for mod in all_models[source_index]]
+    labels_true = ["Source "+name, "Other "+name, "Other Signals"]
+
+    confusion_mean, confusion_std = get_mean_and_std_matrices(all_models, source_index, others_indexes, loss_filename)
+
+    plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='EMG', cmap=plt.cm.Reds,
+                          cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+
+    plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
+                          cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+
+
 if __name__ == "__main__":
     N_Windows = None
     W = 512
@@ -295,69 +353,105 @@ if __name__ == "__main__":
     window_size = 512
     fs = 250
 
-    models = db.ecg_64_models #db.resp_64_models # #+ db.resp_64_models + db.emg_64_1024_models
-    signals = np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist()
-    #np.load("../data/Fantasia_RESP_[64].npz")['x_train'].tolist()
-              # + \
-              # + \
-              # np.load("../data/FMH_[64].npz")['x_train'].tolist()
+    all_models = [db.resp_64_models, db.emg_64_models, db.ecg_64_models]
+    all_signals = [np.load("../data/Fantasia_RESP_[64].npz")['x_train'].tolist(),
+                   np.load("../data/FMH_[64].npz")['x_train'].tolist(),
+                   np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist()]
     first_test_index = 0
 
-    if N_Windows is None:
-        N_Windows = 200000000000
-        for signal in signals:
-            if first_test_index != int(0.33 * len(signal)):
-                first_test_index = int(0.33 * len(signal))
-                signal_test = segment_signal(signal[first_test_index:], W, 0.33)
-                N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
-
-    loss_tensor = []
+    # if N_Windows is None:
+    #     N_Windows = 200000000000
+    #     for signal in signals:
+    #         if first_test_index != int(0.33 * len(signal)):
+    #             first_test_index = int(0.33 * len(signal))
+    #             signal_test = segment_signal(signal[first_test_index:], W, 0.10)
+    #             N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
+    i = 1
+    loss_filename = "/LOSS_FOR_100_SYNTH_"
+    process_losses(i, loss_filename)
+    loss_tensors = []
     # filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH_RESP_ENTROPY"
-    filename = SYNTH_DIRECTORY + "/LOSS_FOR_SYNTH_ECG_"
-    # loss_tensor = calculate_loss_tensor(filename, N_Windows, W, models, signals, overlap=0.33)
+    process_graphs(all_models, 0, [1, 2], loss_filename, "RESP")
+    process_graphs(all_models, 1, [0, 2], loss_filename, "EMG")
+    process_graphs(all_models, 2, [0, 1], loss_filename, "ECG")
 
-    if len(loss_tensor) < 1:
-        loss_tensor = np.load(filename + ".npz")["loss_tensor"]
+    # RESP
+    # labels_pred = [mod.name for mod in all_models[0]]
+    # labels_true = ["Source RESP", "Other RESP", "Other Signals"]
+    #
+    # confusion_mean, confusion_std = get_mean_and_std_matrices(all_models, 0, [1, 2], loss_filename)
+    #
+    # plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='RESP', cmap=plt.cm.Reds,
+    #                       cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+    #
+    # plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
+    #                       cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
 
-    labels_true = [mod.name for mod in models]
-    labels_pred = ["ECG {0}".format(i) for i in range(1, 21)]
-    #["ECG {0}".format(i) for i in range(1, 20)]
-                  # + \
-                  #  + \
-                  # ["EMG {0}".format(i) for i in (range(1, 15))]
+    # EMG
+    labels_pred = [mod.name for mod in all_models[1]]
+    labels_true = ["Source EMG", "Other EMGs", "Other Signals"]
 
-    confusion_mean = np.mean(loss_tensor, axis=2)
-    plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Reds,
+    confusion_mean, confusion_std = get_mean_and_std_matrices(all_models, 1, [0, 2], loss_filename)
+
+    plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='EMG', cmap=plt.cm.Reds,
                           cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
 
-    confusion_std = np.std(loss_tensor, axis=2)
+    plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
+                          cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+    #
+    # # ECG
+    labels_pred = [mod.name for mod in all_models[2]]
+    labels_true = ["Source ECG", "Other ECGs", "Other Signals"]
+
+    confusion_mean, confusion_std = get_mean_and_std_matrices(all_models, 2, [0, 1], loss_filename)
+
+    plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='ECG', cmap=plt.cm.Reds,
+                          cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+
     plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
                           cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
 
-    # ecg_signals_index = list(range(1, 7)) + list(range(9, 19))
-    # resp_signals_index = list(range(20, 40))
-    # # emg_signals_index = list(range(40, np.shape(loss_tensor)[1]))
+    # for loss_tensors
+    # confusion_mean = np.mean(loss_tensor, axis=2)
+    # plot_emg_confusion_matrix(confusion_mean, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Reds,
+    #                       cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
     #
-    # ecg_loss_tensor = loss_tensor[list(range(0, 19))] #/ np.max(loss_tensor[list(range(0, 19))], axis=1)
-    # resp_loss_tensor = loss_tensor[list(range(20, 39))] #/ np.max(loss_tensor[list(range(20, 37))], axis=1)
-    # # emg_loss_tensor = loss_tensor[list(range(39, np.shape(loss_tensor)[0]))]
-    # #emg_loss_tensor = emg_loss_tensor / np.max(emg_loss_tensor, axis=1)
+    # confusion_std = np.std(loss_tensor, axis=2)
+    # plot_confusion_matrix(confusion_std, labels_pred, labels_true, title='Confusion matrix', cmap=plt.cm.Blues,
+    #                       cmap_text=plt.cm.Blues_r, no_numbers=True, norm=False, N_Windows=np.max(confusion_mean))
+    #
+    # resp_indexes = list(range(0, 20))
+    # emg_indexes = list(range(20, 33))
+    # ecg_indexes = list(range(33, 53))
     #
     # mean_loss_per_type = np.zeros((3, 3))
     # std_loss_per_type = np.zeros((3, 3))
     #
-    # mean_loss_per_type[0,0], mean_loss_per_type[0,1], mean_loss_per_type[0,2] = \
-    #     np.mean(ecg_loss_tensor[:, ecg_signals_index]), \
-    #     np.mean(ecg_loss_tensor[:, resp_signals_index]), \
-    #     np.mean(ecg_loss_tensor[:, emg_signals_index])
+    # mean_loss_per_type[0, 0], mean_loss_per_type[0, 1], mean_loss_per_type[0, 2] = \
+    #     np.mean(resp_indexes[:, resp_indexes]), \
+    #     np.mean(resp_indexes[:, emg_indexes]), \
+    #     np.mean(resp_indexes[:, ecg_indexes])
     # mean_loss_per_type[1, 0], mean_loss_per_type[1, 1], mean_loss_per_type[1, 2] = \
-    #     np.mean(resp_loss_tensor[:, ecg_signals_index]), \
-    #     np.mean(resp_loss_tensor[:, resp_signals_index]), \
-    #     np.mean(resp_loss_tensor[:, emg_signals_index])
+    #     np.mean(emg_indexes[:, resp_indexes]), \
+    #     np.mean(emg_indexes[:, emg_indexes]), \
+    #     np.mean(emg_indexes[:, ecg_indexes])
     # mean_loss_per_type[2, 0], mean_loss_per_type[2, 1], mean_loss_per_type[2, 2] = \
-    #     np.mean(emg_loss_tensor[:, ecg_signals_index]), \
-    #     np.mean(emg_loss_tensor[:, resp_signals_index]), \
-    #     np.mean(emg_loss_tensor[:, emg_signals_index])
+    #     np.mean(ecg_indexes[:, resp_indexes]), \
+    #     np.mean(ecg_indexes[:, emg_indexes]), \
+    #     np.mean(ecg_indexes[:, ecg_indexes])
+    #
+    # std_loss_per_type[0, 0], std_loss_per_type[0, 1], std_loss_per_type[0, 2] = \
+    #     np.std(resp_indexes[:, resp_indexes]), \
+    #     np.std(resp_indexes[:, emg_indexes]), \
+    #     np.std(resp_indexes[:, ecg_indexes])
+    # std_loss_per_type[1, 0], std_loss_per_type[1, 1], std_loss_per_type[1, 2] = \
+    #     np.std(emg_indexes[:, resp_indexes]), \
+    #     np.std(emg_indexes[:, emg_indexes]), \
+    #     np.std(emg_indexes[:, ecg_indexes])
+    # std_loss_per_type[2, 0], std_loss_per_type[2, 1], std_loss_per_type[2, 2] = \
+    #     np.std(ecg_indexes[:, resp_indexes]), \
+    #     np.std(ecg_indexes[:, emg_indexes]), \
+    #     np.std(ecg_indexes[:, ecg_indexes])
     #
     # # for j in range(np.shape(mean_loss_per_type)[1]):
     # #     mean_loss_per_type[:, j] = mean_loss_per_type[:, j] / np.max(mean_loss_per_type[:, j])
@@ -365,5 +459,9 @@ if __name__ == "__main__":
     #
     # print(mean_loss_per_type)
     # confusion_mean = np.mean(loss_tensor, axis=2)
-    # plot_confusion_matrix(mean_loss_per_type, ["ECG", "RESP", "EMG"], ["ECG", "RESP", "EMG"], title='Error per type',
+    # plot_emg_confusion_matrix(mean_loss_per_type, ["ECG", "RESP", "EMG"], ["ECG", "RESP", "EMG"], title='Error per type',
+    #                       cmap=plt.cm.Reds, cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=None)
+    #
+    #
+    # plot_emg_confusion_matrix(std_loss_per_type, ["ECG", "RESP", "EMG"], ["ECG", "RESP", "EMG"], title='Error per type',
     #                       cmap=plt.cm.Reds, cmap_text=plt.cm.Reds_r, no_numbers=True, norm=False, N_Windows=None)

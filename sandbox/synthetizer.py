@@ -10,13 +10,13 @@ import DeepLibphys.models.LibphysSGDGRU as GRU
 
 i = 0
 signal = np.random.randint(0, 63, size=1)
-model_info = db.emg_64_models[i]
-signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
-                                hidden_dim=model_info.Hd)
-model = GRU.LibphysSGDGRU(signal2Model)
-
-file_tag = model.get_file_tag(-5, -5)
-model.load(dir_name=model_info.directory)
+model_info = db.emg_64_512_models[i]
+# signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
+#                                 hidden_dim=model_info.Hd)
+# model = GRU.LibphysSGDGRU(signal2Model)
+#
+# file_tag = model.get_file_tag(-5, -5)
+# model.load(dir_name=model_info.directory)
 print("Processing " + model_info.name)
 
 # plt.ion()
@@ -32,9 +32,9 @@ signal = [np.random.randint(0, 63, size=1)[0]]#x_train[1000:1256].tolist()#[np.r
 window_size = 512
 fz = 250
 N = 2000
-signal, probs = model.generate_predicted_signal(N, signal, window_size, uncertaintly=0.01)
+# signal, probs = model.generate_predicted_signal(N, signal, window_size, uncertaintly=0.01)
 filename = "../data/EMG_[1.512].npz"
-np.savez(filename, synth_signal=signal, probability=probs)
+# np.savez(filename, synth_signal=signal, probability=probs)
 signal, probs = np.load(filename)["synth_signal"], np.load(filename)["probability"]
 plt.title("Physiological Signal Synthesizer", fontsize=32)
     # if i >= N:
@@ -46,15 +46,24 @@ plt.title("Physiological Signal Synthesizer", fontsize=32)
 # accy = accy[10100:12100]-np.min(accy[10100:12100])
 # accy = accy*64/np.max(accy)
 #
+
+accz, emgs = get_fmh_emg_datset(20000, row=8, example_index_array=[0])
 # accz = get_fmh_emg_datset(20000, row=10, example_index_array=[i])[0]
 # accz = accz[10100:12100]-np.min(accz[10100:12100])
-# accz =
 
 # plt.plot(accx, 'r', accy, 'g', accz, 'b')
 # plt.show()
-x_train = x_train[10100:10100+len(signal)]
+signal = signal[630:]
+probs = probs[630:]
+x_train = x_train[10550:10550+len(signal)]
+accz = accz[0][10550:10550+len(signal)]
+# accz = np.load('accz.npz')['accz'][0][10550:10550+len(signal)]
+accz = accz - np.min(accz)
+accz = accz * 64 / np.max(accz)
+
+probs = probs
 # plot_gru_simple(model_info, x_train[10100:12100], signal, np.array(probs).T)
-plot_gru_simple(model_info, x_train, signal, probs.T)
+plot_gru_simple_emg(model_info, x_train, [accz, signal], signal, probs.T)
 
     # plt.scatter(i/250, signal[-1], marker='.', linestyle='--')
 # plt.pause(0.01)

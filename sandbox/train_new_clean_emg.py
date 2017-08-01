@@ -147,27 +147,37 @@ window_size = 512
 save_interval = 1000
 signal_directory = 'SYNTHESIS[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = np.arange(0, 14)
-# accz, emgs = get_fmh_emg_datset(20000, row=10, example_index_array=indexes)
+indexes = np.array([12])#np.arange(7, 8)
+# accz, emgs = get_fmh_emg_datset(20000, row=9, example_index_array=indexes)
 # np.savez('accz.pnz', accz=accz)
-accz = np.load('accz.npz')['accz']
-emgs = np.load("../data/FMH_[64].npz")['x_train']
-accs = [acc - np.mean(acc) for acc in accz]
-# accz = accz-np.min(accz)
-# accz = accz*64/np.max(accz)
-train_other_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, emgs,
-              save_interval, signal_dim, accs)
+# accz = np.load('accz.npz')['accz']
+# emgs = np.load("../data/FMH_[64].npz")['x_train']
+# accs = [acc - np.mean(acc) for acc in accz]
+# # accz = accz-np.min(accz)
+# # accz = accz*64/np.max(accz)
+# train_other_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, emgs,
+#               save_interval, signal_dim, accs)
 
 # train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
 #            signal_dim)
-
+N_Windows = None
+W = 512
+first_test_index = 0
+signals = np.load("../data/FANTASIA_ECG[64].npz")['x_train'].tolist()
+if N_Windows is None:
+    N_Windows = 200000000000
+    for signal in signals:
+        if first_test_index != int(0.33 * len(signal)):
+            first_test_index = int(0.33 * len(signal))
+            signal_test = segment_signal(signal[first_test_index:], W, 0.33)
+            N_Windows = len(signal_test[0]) if len(signal_test[0]) < N_Windows else N_Windows
 
 print("Loading signals...")
 # x_train, y_train = get_fmh_emg_datset(signal_dim, dataset_dir="EMG_Lower", row=0)
 # np.savez("../data/FMH_[64].npz", x_train=x_train, y_train=y_train)
-# x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
-# # print(len(x_train))
-#
-#
-# train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
-#                signal_dim)
+x_train, y_train = np.load("../data/FMH_[64].npz")['x_train'], np.load("../data/FMH_[64].npz")['y_train']
+# print(len(x_train))
+
+
+train_FMH(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
+               signal_dim)

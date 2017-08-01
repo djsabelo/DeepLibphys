@@ -201,7 +201,7 @@ ecg_64_models = [ModelInfo(Hd=256, Sd=64, dataset_name="ecg_"+str(i+1),
                         directory="BIOMETRY[128.512]")
               for i in range(0, 20)]
 
-emg_64_models = [ModelInfo(Hd=512, Sd=64, dataset_name="emg_"+str(i),
+emg_64_models = [ModelInfo(Hd=512, Sd=64, W=512, dataset_name="emg_"+str(i),
                         name="EMG "+str(i),
                         directory="SYNTHESIS[256.512]")
               for i in (list(range(1, 15)))]

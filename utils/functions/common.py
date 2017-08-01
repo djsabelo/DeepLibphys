@@ -774,11 +774,12 @@ def plot_gru_simple_emg(model, original_data, acc, predicted_signal, signal_prob
     cax2 = fig.add_subplot(gs[1, 1])
 
     # PLOT AXIS 1
-    ax1.plot(original_data, color="#990000")
-    ax1.plot(acc[0], color="#8A2BE2", alpha=1, label='acc x')
-    ax1.plot(acc[1], color="#00BFFF", alpha=1, label='acc y')
-    ax1.plot(acc[2], color="#B0E0E6", alpha=1, label='acc z')
-    ax1.legend()
+    ax1.plot(acc[0], color="#8A2BE2", alpha=0.5, label='acc x')
+    ax1.plot(acc[1], color="#009900", alpha=0.5, label='synthesized')
+    ax1.plot(original_data, color="#990000", label='original')
+    ax1.set_xlim([0, len(acc[0])])
+    # ax1.plot(acc[2], color="#B0E0E6", alpha=1, label='acc z')
+    ax1.legend(loc=1, borderaxespad=0.)
 
     # PLOT AXIS 2
     bounds = np.arange(0, 1., 0.05).tolist()
