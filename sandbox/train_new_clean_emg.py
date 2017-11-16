@@ -147,7 +147,7 @@ window_size = 512
 save_interval = 1000
 signal_directory = 'SYNTHESIS[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = np.array([12])#np.arange(7, 8)
+indexes = np.array([11])#np.arange(7, 8)
 # accz, emgs = get_fmh_emg_datset(20000, row=9, example_index_array=indexes)
 # np.savez('accz.pnz', accz=accz)
 # accz = np.load('accz.npz')['accz']

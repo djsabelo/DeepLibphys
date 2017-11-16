@@ -1,5 +1,5 @@
 from DeepLibphys.utils.functions.common import *
-from DeepLibphys.utils.functions.signal2model import Signal2Model
+from DeepLibphys.utils.functions.signal2model import *
 import DeepLibphys.models.LibphysMBGRU as GRU
 
 signal_dim = 256
@@ -9,8 +9,24 @@ batch_size = 128
 window_size = 1024
 save_interval = 1000
 
-cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/long-term'
-processed_data_path = '../data/biometry_segmented_cybhi[256].npz'
+# cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/long-term'
+
+noise_removed_path = "Data/CYBHi/signals.npz"
+processed_data_path = '../data/processed/biometry_cybhi[256].npz'
+fileDir = "Data/CYBHi"
+
+pos_noise_rem_signals = np.load(noise_removed_path)
+signals = []
+signal_data = Signal()
+tw = TimeWindow()
+
+
+
+signals = np.load(fileDir + "/signals.npz")["signals"]
+
+
+
+
 # train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
 #     get_cyb_dataset_segmented(signal_dim, window_size, peak_into_data=False, confidence=0.01)
 #
@@ -22,12 +38,10 @@ train_dates, train_names, train_signals, test_dates, test_names, test_signals = 
     npzfile['test_names'], npzfile['test_signals']
 
 
-noisy_data = ['ABD', 'AG', 'AR', 'ARF', 'CB', 'DC', 'JB', 'GF', 'JCA', 'JN', 'MBA', 'MC', 'MMJ', 'MQ', 'PMA', 'RD',
-              'RF', 'RL', 'RR', 'SR', 'VM']
 print("Training {0} of {1}".format(len(train_dates) - len(noisy_data), len(train_dates)))
 signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+z = 0
 
-z = 4
 for i, signal, person_name in zip(range(z, len(train_signals)), train_signals[z:], train_names[z:]):
     if noisy_data.count(person_name) == 0:
         name = 'ecg_cybhi_' + person_name

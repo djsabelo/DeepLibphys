@@ -1,7 +1,6 @@
 import numpy as np
 
 from DeepLibphys.models import LibphysSGDGRU
-from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models.LibphysGRU import LibphysGRU
 import theano
@@ -49,13 +48,14 @@ class LibphysMBGRU(LibphysGRU):
             x_e = E[:, x_t]
 
             def GRU(i, U, W, b, x_0, s_previous):
+                U_copy, W_copy = U, W
                 b1 = T.specify_shape((coversion_ones * b[i * 3, :]).T, T.shape(x_0))
                 b2 = T.specify_shape((coversion_ones * b[i * 3 + 1, :]).T, T.shape(x_0))
                 b3 = T.specify_shape((coversion_ones * b[i * 3 + 2, :]).T, T.shape(x_0))
 
-                z = T.nnet.hard_sigmoid(U[i * 3 + 0].dot(x_0) + W[i * 3 + 0].dot(s_previous) + b1)
-                r = T.nnet.hard_sigmoid(U[i * 3 + 1].dot(x_0) + W[i * 3 + 1].dot(s_previous) + b2)
-                s_candidate = T.tanh(U[i * 3 + 2].dot(x_0) + W[i * 3 + 2].dot(s_previous * r) + b3)
+                z = T.nnet.hard_sigmoid(U_copy[i * 3 + 0].dot(x_0) + W_copy[i * 3 + 0].dot(s_previous) + b1)
+                r = T.nnet.hard_sigmoid(U_copy[i * 3 + 1].dot(x_0) + W_copy[i * 3 + 1].dot(s_previous) + b2)
+                s_candidate = T.tanh(U_copy[i * 3 + 2].dot(x_0) + W_copy[i * 3 + 2].dot(s_previous * r) + b3)
 
                 return (T.ones_like(z) - z) * s_candidate + z * s_previous
 

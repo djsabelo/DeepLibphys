@@ -32,7 +32,7 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
                                 window_size=window_size,
                                 hidden_dim=hidden_dim,
                                 mini_batch_size=mini_batch_size,
-                                learning_rate_val=0.05,
+                                learning_rate_val=0.1,
                                 save_interval=100000)
 
     if i == 0:
@@ -41,7 +41,7 @@ for i, group_signals in zip(range(z, len(all_signals)), all_signals[z:]):
         model = GRU.LibphysSGDGRU(signal2model)
         model.train_block(group_signals, signal2model, n_for_each=1)
     for j in range(len(group_signals)):
-        if i == 0 and j < 16:
+        if i == 0 and j < 29:
             pass
         else:
             train_group = group_signals

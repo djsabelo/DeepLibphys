@@ -13,6 +13,7 @@ from matplotlib.font_manager import FontProperties
 from novainstrumentation.smooth import smooth
 from scipy.interpolate import griddata
 from sklearn.model_selection import train_test_split
+from matplotlib.backends.backend_pdf import PdfPages
 import sys
 
 import DeepLibphys.models.libphys_GRU as GRU
@@ -25,8 +26,6 @@ FANTASIA_ECG = 'Fantasia/ECG/mat/'
 FANTASIA_RESP = 'Fantasia/RESP/mat/'
 CYBHi_ECG = 'CYBHi/data/long-term'
 
-class ModelType:
-    MINI_BATCH, SGD, CROSS_SGD, CROSS_MBSGD = range(4)
 
 """#####################################################################################################################
 ########################################################################################################################
@@ -92,7 +91,9 @@ def acquire_and_process_signals(full_paths, signal_dim, decimate=None, peak_into
     return signals
 
 def remove_noise(signal, moving_avg_window=60, smooth_window=10):
-    signal = smooth(remove_moving_avg(signal, moving_avg_window), smooth_window) # smooth the signal
+    signal = smooth(remove_moving_std(remove_moving_avg(signal, moving_avg_window)), smooth_window)[200:] # smooth the signal
+    signal /= np.max(abs(signal))
+    signal -= np.mean(abs(signal))
     return signal
 
 def process_signal(signal, interval_size, peak_into_data, decimate, regression):
@@ -129,7 +130,7 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60,
     # plt.plot(signal[0])
     # plt.show()
 
-    signal = remove_moving_std(signal, window_rmstd)
+    # signal = remove_moving_std(signal, window_rmstd)
 
     if len(np.shape(signal)) > 1:
         print("processing signals")
@@ -191,19 +192,18 @@ def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, w
 def descretitize_signal(signal, interval_size, confidence = 0.001):
     n, bins = np.histogram(signal.T, 10000)
     distribution_sum = np.cumsum(n)
-    MIN = bins[np.where(distribution_sum <= confidence * np.sum(n))[0][-1]]
-    MAX = bins[np.where(distribution_sum >= (1-confidence) * np.sum(n))[0][0]]
+    index_min = np.where(distribution_sum <= confidence * np.sum(n))[0]
+    MIN = bins[index_min[-1]] if len(index_min) > 0 else np.min(signal)
+    index_max = np.where(distribution_sum >= (1-confidence) * np.sum(n))[0]
+    MAX = bins[index_max[0]] if len(index_max) > 0 else np.max(signal)
     signal[signal >= MAX] = MAX
     signal[signal <= MIN] = MIN
 
-    decimals = len(str(int(interval_size)))
-    signal -= np.min(signal)                                # removed the minimum value
-    signal = np.around(signal / np.max(signal), decimals)   # made a discrete representation of the signal
-    signal *= (interval_size - 1)                       # with "interval_size" steps (min = 0, max = interval_size-1))
-    # signal = np.around(signal)
-    # plt.clf()
+    signal -= np.min(signal)           # removed the minimum value
+    signal = signal / np.max(signal)   # made a discrete representation of the signal
+    signal *= (interval_size - 1)      # with "interval_size" steps (min = 0, max = interval_size-1))
 
-    return signal.astype(int)                       # insert signal into an array of signals
+    return np.around(signal).astype(int) # insert signal into an array of signals
 
 
 def process_web_signal(signal, interval_size, smooth_window, peak_into_data, decimate=None, window=1, smooth_type='hanning'):
@@ -276,8 +276,8 @@ def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_E
                                               window_smooth=100, window_rmavg=3000, window_rmstd=6000))
             # segments.append(process_dnn_segments(signal, signal_dim, window_size=1024, overlap=0.33,
             #                                      window_smooth=100, window_rmavg=3000, window_rmstd=6000, confidence=0.0001))
-        else:
-            signals.append(process_dnn_signal(signal, signal_dim))
+        elif len(signal)>0:
+            signals.append(process_dnn_signal(signal, signal_dim, confidence=0.005))
 
 
         if peak_into_data:
@@ -359,6 +359,14 @@ def get_fantasia_full_paths(dataset_dir, example_index_array):
             file_name = 'f1y0' + str(example-10) + 'm.mat'
         elif example == 20:
             file_name = 'f2y10m.mat'
+        elif example <= 29:
+            file_name = 'f2o0' + str(example-20) + 'm.mat'
+        elif example == 30:
+            file_name = 'f2o10m.mat'
+        elif example <= 39:
+            file_name = 'f2y0' + str(example-30) + 'm.mat'
+        elif example == 40:
+            file_name = 'f1y10m.mat'
 
         full_paths[i] = RAW_SIGNAL_DIRECTORY + dataset_dir + file_name
         i += 1
@@ -433,7 +441,7 @@ def get_cyb_dataset_segmented(signal_dim, window_size=1024, dataset_dir=CYBHi_EC
 
     return train_dates, train_names, processed_train_signals, test_dates, test_names, processed_test_signals
 
-def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG):
+def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
     dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
     full_paths = os.listdir(dataset_dir)
     train_signals = []
@@ -451,28 +459,29 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG):
                 filename = file_path.split('/')[-1].split('.')[0]
                 name = filename[9:-6]
                 date = filename[:8]
-
-
-                signal = np.loadtxt(file)
-                signal = sig.decimate(signal, 4)
-                N = len(signal)
-                time = len(signal)/fs
-
-                for sample, i in zip(signal, range(len(signal))):
-                    if sample != 0:
-                        signal = signal[i:]
-                        break
-
-                if train_names.count(name) == 0:
-                    train_signals.append(signal)
-                    train_names.append(name)
-                    train_dates.append(date)
+                if (index_names is not None) and (name not in index_names):
+                    pass
                 else:
-                    test_signals.append(signal)
-                    test_names.append(name)
-                    test_dates.append(date)
+                    signal = np.loadtxt(file)
+                    signal = sig.decimate(signal, 4)
+                    N = len(signal)
+                    time = len(signal)/fs
 
-                print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
+                    for sample, i in zip(signal, range(len(signal))):
+                        if sample != 0:
+                            signal = signal[i:]
+                            break
+
+                    if train_names.count(name) == 0:
+                        train_signals.append(signal)
+                        train_names.append(name)
+                        train_dates.append(date)
+                    else:
+                        test_signals.append(signal)
+                        test_names.append(name)
+                        test_dates.append(date)
+
+                    print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
             except ValueError:
                 print("Error")
                 pass
@@ -497,28 +506,45 @@ def sort_by_key(key_array, array_2_sort):
 def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False, confidence=0.001):
     full_paths = os.listdir(dataset_dir)
     signals = []
-    fs = 360
+    fs = 128
+    first_list = ["221m", "202m"]
+    second_list = ["19830m", "14172m", "17453m", "14134m", "114m", "228m", "109m", "213m"]
+    third_list = ["108m", "207m", "119m", "14046m", "14184m"]
     for file_path in full_paths:
         if file_path[-3:] == "mat":
             file = dataset_dir+'/'+file_path
             print("Processing file: {0}".format(file))
             try:
-                signal = sio.loadmat(file)[val][row]
-                N = len(signal)
-                time = len(signal)/fs
-                iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
-                t = np.arange(0, time-1/500, 1/500)
-                signal = iter_(t)
-                signal = sig.decimate(signal, 2)
-                signal = process_dnn_signal(signal, signal_dim, confidence)
-                signals.append(signal)
-                #
-                #         if peak_into_data:
-                if peak_into_data == True:
-                    peak_into_data = 1000
-                    plt.plot(signal[1000:1000+peak_into_data])
-                    plt.show()
-                print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
+                # if any(file_path[:-4] in s for s in (first_list + second_list + third_list)):
+                    signal = sio.loadmat(file)[val][row][3000:903000]
+                    N = len(signal)
+                    time = len(signal)/fs
+                    iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
+                    t = np.arange(0, time-1/250, 1/256)
+                    signal = iter_(t)
+                    # signal = sig.decimate(signal, 2)
+                    if any(file_path[:-4] in s for s in first_list):
+                        signal = process_dnn_signal(signal, signal_dim, confidence=0.01)
+                    elif any(file_path[:-4] in s for s in second_list):
+                        signal = process_dnn_signal(signal, signal_dim, confidence=0.02)
+                    elif any(file_path[:-4] in s for s in third_list):
+                        signal = process_dnn_signal(signal, signal_dim, confidence=0.03)
+                    else:
+                        signal = process_dnn_signal(signal, signal_dim, confidence=confidence)
+
+            # "223m", "106m", "222" - > experimentar o moving_std
+                    signals.append(signal)
+
+            #
+            #         if peak_into_data:
+                    if peak_into_data == True:
+                        plt.title(file_path)
+                        plt.plot(signal)
+                        plt.show()
+
+                # plt.plot(signal)
+                # plt.show()
+                    print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
             except ValueError:
                 print("Error")
                 pass
@@ -774,12 +800,12 @@ def plot_gru_simple_emg(model, original_data, acc, predicted_signal, signal_prob
     cax2 = fig.add_subplot(gs[1, 1])
 
     # PLOT AXIS 1
-    ax1.plot(acc[0], color="#8A2BE2", alpha=0.5, label='acc x')
-    ax1.plot(acc[1], color="#009900", alpha=0.5, label='synthesized')
+    # ax1.plot(acc[0], color="#8A2BE2", alpha=0.5, label='acc x')
+    # ax1.plot(acc[1], color="#009900", alpha=0.5, label='synthesized')
     ax1.plot(original_data, color="#990000", label='original')
     ax1.set_xlim([0, len(acc[0])])
     # ax1.plot(acc[2], color="#B0E0E6", alpha=1, label='acc z')
-    ax1.legend(loc=1, borderaxespad=0.)
+    # ax1.legend(loc=1, borderaxespad=0.)
 
     # PLOT AXIS 2
     bounds = np.arange(0, 1., 0.05).tolist()
@@ -1147,36 +1173,44 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
     FP = 0
     FN = 0
     TOTAL = 0
+    IR = 0
     for line, i in zip(confusion_matrix, range(N)):
         TP += line[i]
-        FP += np.sum(confusion_matrix[np.arange(N) != i, i])
+        FP += np.sum(confusion_matrix[i, np.arange(N) != i])
         TN += np.sum(confusion_matrix[np.arange(N) != i, np.arange(N) != i])
-        FN += np.sum(line) - line[i]
+        FN += np.sum(confusion_matrix[np.arange(N) != i, i])
         TOTAL += np.sum(confusion_matrix)
 
     ACC = 100 * (TP + TN) / TOTAL
     # acc = 100 * np.sum(np.diag(confusion_matrix))/np.sum(confusion_matrix)
-    sens = 100 * TN / (TN + FN)
+    sens = 100 * TP / (TP + FN)
     spec = 100 * TN / (TN + FP)
+    IR = np.sum(np.diag(confusion_matrix)) * 100 / np.sum(confusion_matrix)
 
     fig, ax = plt.subplots()
     ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
                                        norm, N_Windows)
 
-    ax.annotate('Accurancy of {0:.1f}%'.format(ACC),
+    ax.annotate('Id Rate of {0:.1f}%'.format(IR),
                 xy=(0.5, 0), xytext=(0, 60),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
                 size=15, ha='center', va='bottom')
 
-    ax.annotate('Specificity of {0:.1f}%'.format(spec),
+    ax.annotate('Accurancy of {0:.1f}%'.format(ACC),
                 xy=(0.5, 0), xytext=(0, 35),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
                 size=15, ha='center', va='bottom')
 
-    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
+    ax.annotate('Specificity of {0:.1f}%'.format(spec),
                 xy=(0.5, 0), xytext=(0, 10),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=15, ha='center', va='bottom')
+
+    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
+                xy=(0.5, 0), xytext=(0, -10),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
                 size=15, ha='center', va='bottom')
@@ -1184,6 +1218,7 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
     # ax = prepare_confusion_pie(ax, confusion_matrix)
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
+    plt.title(title)
     plt.show()
 
 def plot_confusion_matrix_with_pie(confusion_matrix, labels_pred, labels_true, rejection=None, title='Confusion matrix',
@@ -1206,8 +1241,7 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
                                   cmap_text, no_numbers, norm, N_Windows):
 
     if norm:
-        for i in range(np.shape(confusion_matrix)[0]):
-            confusion_matrix[i] = confusion_matrix[i] / np.sum(confusion_matrix[i])
+        confusion_matrix = confusion_matrix / np.sum(confusion_matrix, axis=0)
 
     # plt.tight_layout()
     # if len(labels_pred) == 2:
@@ -1231,6 +1265,7 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     plt.colorbar()
     # plt.tight_layout()
     kwargs = dict(size=30, fontweight='bold')
+
     plt.ylabel('Model', **kwargs)
     plt.xlabel('Signal', **kwargs)
     ax.set_xticks(np.arange(-0.5, np.shape(confusion_matrix)[1], 0.5))
@@ -1323,7 +1358,71 @@ def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#
         txt = ax.text(0.5, 0.9, str(rejection)+"%", ha='center', **kwargs)
         txt.set_path_effects([pte.Stroke(linewidth=2, foreground='white'), pte.Normal()])
 
+def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_mean=True):
+    cmap = mpl.cm.get_cmap('rainbow')
+    fig = plt.figure("fig", figsize=(900 / 96, 600 / 96), dpi=96)
+    for i, EER in zip(range(len(EERs)), EERs):
+        plt.plot(time, EER, '.', color=cmap(i / len(EERs)), alpha=0.1)
+        plt.plot(time, EER, color=cmap(i / len(EERs)), alpha=0.1, label=labels[i])
+    params = {'legend.fontsize': 3}
+    plt.rcParams.update(params)
 
+    if plot_mean:
+        mean_EERs = np.mean(EERs, axis=0).squeeze()
+        std_EERs = np.std(EERs, axis=0).squeeze()
+        index_min = np.argmin(mean_EERs)
+        plt.plot(time, mean_EERs, 'b.', alpha=0.8)
+        plt.plot(time, mean_EERs, 'b-', alpha=0.8, label="Mean")
+        plt.plot(time[index_min], np.min(mean_EERs), 'ro', alpha=0.9)
+        (_, caps, _) = plt.errorbar(time, mean_EERs, yerr=std_EERs, color='b', alpha=0.8, elinewidth=1, capsize=5)
+        for x, cap in enumerate(caps):
+            caps[x].set_markeredgewidth(1)
+
+    else:
+        for i, EER in zip(range(len(EERs)), EERs):
+            index_min = np.argmin(EER)
+            plt.plot(time[index_min], np.min(EER), 'o', color=cmap(i / len(EERs)), alpha=0.6)
+
+    indexi = 0.6 * np.max(time)
+    indexj = 0.5 * (np.max(EER) - np.min(EER))
+
+    step = (np.max(EER) - np.min(EER))
+    if plot_mean:
+        plt.annotate("EER MIN MEAN = {0:.3f}%".format(mean_EERs[index_min] * 100),
+                     xy=(indexi, indexj))
+
+        # plt.annotate("EER MIN STD = {0:.4f}".format(np.std(EER)),
+        #              xy=(indexi, indexj - step))
+        #
+        # plt.annotate("TIME FOR MIN MEAN = {0:.4f}".format(time[index_min]),
+        #              xy=(indexi, indexj - step * 2))
+        #
+        # plt.annotate("TIME FOR MIN STD = {0:.4f}".format(mean_EERs[index_min]),
+        #              xy=(indexi, indexj - step * 3))
+    else:
+        for i, EER in zip(range(len(EERs)), EERs):
+            index_min = np.argmin(EER)
+            plt.annotate("EER MIN = {0:.3f}%".format(EER[index_min] * 100),
+                         xy=(time[index_min], EER[index_min] + 0.01), color=cmap(i / len(EERs)), ha='center')
+
+    plt.legend()
+    plt.title(title)
+
+    if savePdf:
+        full_path = filepath + "/img/EER{0}.pdf".format(file)
+        # if savePdf:
+        print("Saving {0}.pdf".format(full_path))
+        if not os.path.exists(filepath):
+            os.makedirs(filepath)
+
+        pdf = PdfPages(full_path)
+        # plt.savefig(dir_name + "/EER{0}.eps".format(file), format='eps', dpi=100)
+        pdf.savefig(fig)
+        pdf.close()
+    else:
+        plt.show()
+
+    return plt
 
 def getFontProperties(weight, family, size, style=None):
     # Specify Font Properties of text-------------------------------------------------------------------
@@ -1560,3 +1659,58 @@ def randomize_batch(x_windows, y_windows, batch_size=None):
         return x_windows[window_indexes[0:batch_size], :], y_windows[window_indexes[0:batch_size], :]
     else:
         return x_windows[:, window_indexes[0:batch_size], :], y_windows[:, window_indexes[0:batch_size], :]
+
+def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=0.6, std_tol=100, randomize=True):
+    x__matrix, y__matrix = [], []
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+    reject = 0
+    total = 0
+    windows_standard_deviation = []
+    ws = []
+    windows_amplitude = []
+    small_windows = []
+    indexes = []
+    for w, window in enumerate(windows):
+        if len(window) > window_size + 1:
+            for s_w in range(0, len(window) - window_size - 1, int(window_size * overlap)):
+                small_windows.append(np.round(window[s_w:s_w + window_size]))
+                windows_standard_deviation.append(np.std(small_windows[-1]))
+                windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+                indexes.append(s_w)
+
+    stw_median = np.median(windows_standard_deviation)
+    limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    rejected_windows = []
+    for amp, stw, window, i in zip(windows_amplitude, windows_standard_deviation, small_windows, indexes):
+        if (amp > mean_tol * signal2model.signal_dim) and (limits[0] <= stw <= limits[1]):
+            x__matrix.append(window[:-1])
+            y__matrix.append(window[1:])
+        else:
+            rejected_windows.append(i)
+            reject += 1
+
+        total += 1
+    #
+    # plt.plot( windows[0])
+    # for w in rejected_windows:
+    #     plt.plot(np.arange(w, w+window_size), windows[0][np.arange(w, w+window_size)], 'k')
+
+    # plt.show()
+    x__matrix = np.array(x__matrix)
+    y__matrix = np.array(y__matrix)
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    if randomize:
+        indexes = end_train_index + np.random.permutation(int(batch_size))
+    else:
+        indexes = end_train_index + np.arange(int(batch_size))
+
+    print("Windows of {0}: {1}; Rejected: {2} of {3}".format(signal2model.model_name, batch_size, reject, total))
+    return x__matrix[indexes], y__matrix[indexes]

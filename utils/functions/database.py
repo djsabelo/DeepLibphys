@@ -206,6 +206,11 @@ emg_64_models = [ModelInfo(Hd=512, Sd=64, W=512, dataset_name="emg_"+str(i),
                         directory="SYNTHESIS[256.512]")
               for i in (list(range(1, 15)))]
 
+emg_64_32_models = [ModelInfo(Hd=512, Sd=64, W=512, dataset_name="emg_"+str(i),
+                        name="EMG "+str(i),
+                        directory="Synthesis")
+              for i in (list(range(1, 15)))]
+
 emg_64_1024_models = [ModelInfo(Hd=512, Sd=64, dataset_name="emg_"+str(i),
                         name="EMG "+str(i),
                         directory="SYNTHESIS[128.1024]")
@@ -221,45 +226,45 @@ ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
                         directory="CLEAN_ECG_BIOMETRY[256.1024]")
               for i in range(0, 20)]
 
-ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="clean_ecg"+str(i+1),
-                        name="ECG "+str(i+1),
-                        directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i),
+                              name="ECG "+str(i),
+                              directory="ECG_BIOMETRY[256.1024]")
+                    for i in range(1, 41)]
 
 ecg_1024_256_SNR_12 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_12",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_11 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_11",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_10 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_10",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_9 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_9",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_8 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_8",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_7 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_7",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 ecg_1024_256_SNR_6 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_6",
                         name="ECG "+str(i+1),
                         directory="ECG_BIOMETRY[128.1024]")
-              for i in range(0, 20)]
+              for i in range(0, 40)]
 
 
 ecg_noisy_models = [ModelInfo(Hd=256, dataset_name="noisy_ecg_"+str(i),
@@ -269,28 +274,43 @@ ecg_noisy_models = [ModelInfo(Hd=256, dataset_name="noisy_ecg_"+str(i),
 
 ecg_SNR_12 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_12"+str(i),
                         name="ECG "+str(i),
-                        directory="CLEAN_ECG_BIOMETRY[256.256]")
-              for i in range(1, 21)]
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
 
 ecg_SNR_9 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_9"+str(i),
                         name="ECG "+str(i),
-                        directory="CLEAN_ECG_BIOMETRY[256.256]")
-              for i in range(1, 21)]
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
 
 ecg_SNR_8 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_8"+str(i),
                         name="ECG "+str(i),
-                        directory="CLEAN_ECG_BIOMETRY[256.256]")
-              for i in range(1, 21)]
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
+
+ecg_SNR_7 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_7"+str(i),
+                        name="ECG "+str(i),
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
+
+ecg_SNR_6 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_6"+str(i),
+                        name="ECG "+str(i),
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
 
 ecg_SNR_11 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_11"+str(i),
                         name="ECG "+str(i),
-                        directory="CLEAN_ECG_BIOMETRY[256.256]")
-              for i in range(1, 21)]
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 41)]
 
 ecg_SNR_10 = [ModelInfo(Hd=256, dataset_name="ecg_SNR_10"+str(i),
                         name="ECG "+str(i),
-                        directory="CLEAN_ECG_BIOMETRY[256.256]")
-              for i in range(1, 21)]
+                        directory="ECG_BIOMETRY[256.256]")
+              for i in range(1, 4)]
+
+mit_256 = [ModelInfo(Hd=256, Sd=256, dataset_name="ecg_mit_"+str(i),
+                        name="MIT "+str(i+1),
+                        directory="ECG_BIOMETRY[128.1024]")
+              for i in range(0, 45)]
 
 cybhi_256 = [ModelInfo(Hd=256, dataset_name="ecg_cybhi_"+str(i),
                         name="CYBHi "+str(i+1),

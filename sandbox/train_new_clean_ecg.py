@@ -2,14 +2,13 @@ import time
 
 import numpy as np
 
-import DeepLibphys
 import DeepLibphys.utils.functions.database as db
 from novainstrumentation import smooth
-from DeepLibphys.utils.functions.common import *
 import matplotlib.pyplot as plt
 from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
 import seaborn
+from DeepLibphys.utils.functions.common import *
 import DeepLibphys.models.LibphysMBGRU as GRU
 
 
@@ -75,29 +74,67 @@ def process_and_save_fantasia(plot=False, signal_dim=64):
 def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, signals,save_interval,signal_dim):
     for i, signal in zip(indexes, signals[indexes]):
         name = 'ecg_' + str(i+1)
+
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
-                                    save_interval=save_interval)
+                                    save_interval=save_interval, lower_error=3e-2, lower_learning_rate=1e-4, count_to_break_max=5)
         print("Compiling Model {0}".format(name))
-        model = GRU.LibphysMBGRU(signal2model)
-        print("Initiating training... ")
-        model.train(signal, signal2model)
 
-signal_dim = 64
-hidden_dim = 256
+        model = GRU.LibphysMBGRU(signal2model)
+        try:
+
+            if i < 20:
+                old_directory = "CLEAN_ECG_BIOMETRY[128.1024]"
+                old_name = 'clean_ecg' + str(i+1)
+            else:
+                old_directory = "ECG_BIOMETRY[128.1024]"
+                old_name = name
+
+            old_tag= 'GRU_{0}[{1}.{2}.{3}.{4}.{5}]'. \
+                format(old_name, signal_dim, hidden_dim, -1, -5, -5)
+            model.load(old_tag, old_directory)
+        except:
+            pass
+
+        print("Initiating training... ")
+        last_index = int(len(signal)*0.33)
+        model.model_name = 'ecg_' + str(i+1)
+        x_train, y_train = prepare_test_data([signal[:last_index]], signal2model, mean_tol=0.9, std_tol=0.1)
+
+        model.start_time = time.time()
+        returned = model.train_model(x_train, y_train, signal2model)
+        if returned:
+            model.save(signal2model.signal_directory, model.get_file_tag(-5, -5))
+
+
+model_info = db.ecg_1024_256_RAW[0]
+signal_dim = model_info.Sd
+hidden_dim = model_info.Hd
 mini_batch_size = 16
-batch_size = 128
-window_size = 512
+batch_size = 256
+window_size = 1024
 save_interval = 10000
 signal_directory = 'BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-indexes = [6]
+indexes = np.arange(1, 41)
 
 print("Loading signals...")
 # signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
 # x_train, y_train = get_fantasia_dataset(signal_dim, indexes, db.fantasia_ecgs[0].directory, peak_into_data=False)
-# np.savez("../data/FANTASIA_ECG[64].npz", x_train=x_train, y_train=y_train)
-x_train, y_train = np.load("../data/FANTASIA_ECG[64].npz")['x_train'], np.load("../data/FANTASIA_ECG[64].npz")['y_train']
+# np.savez("../data/processed/FANTASIA_ECG[256].npz", x_train=x_train, y_train=y_train)
+x_train, y_train = np.load("../data/processed/FANTASIA_ECG[256].npz")['x_train'], \
+                   np.load("../data/processed/FANTASIA_ECG[256].npz")['y_train']
+# for x in x_train:
+#     plt.plot(x)
+#     plt.show()
+# print(xxasxa)
+indexes = np.array([8, 9])
+indexes = np.array([18, 19, 26])
+# indexes = np.array([27, 28])
+# indexes = np.array([29, 37])
+# indexes = np.array([38, 39])
 
+# indexes = np.arange(20, 30)
+# indexes = np.arange(30, 40)
 train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_directory, indexes, x_train, save_interval,
                signal_dim)

@@ -18,6 +18,7 @@ def make_noise_signals(full_paths, max_target_SNR=16, signal_dim=64):
     N_SIGNALS, N_NOISE, N_SAMPLES = len(full_paths), len(target_SNR_array), 0
     processed_noise_array = np.zeros((N_NOISE, N_SIGNALS, len(sio.loadmat(full_paths[0])['val'][0])))
     SNR = np.zeros(N_NOISE)
+    SNRs = np.zeros(N_SIGNALS)
     for i, file_path in zip(range(len(full_paths)), full_paths):
         print("Processing " + file_path)
         signal = sio.loadmat(file_path)['val'][0]
@@ -25,14 +26,15 @@ def make_noise_signals(full_paths, max_target_SNR=16, signal_dim=64):
         smoothed_signal = smooth(signal)
 
         SNR = int(calculate_signal_to_noise_ratio(signal, smoothed_signal))
-
-        last_std = 0.0001
-        j = 0
-        for target_SNR in target_SNR_array:
-            signal_with_noise, last_std = make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=last_std)
-            processed_noise_array[j, i, :] = process_dnn_signal(signal_with_noise, signal_dim)
-            j += 1
-
+        SNRs[i] = SNR
+        # last_std = 0.0001
+        # j = 0
+        # for target_SNR in target_SNR_array:
+        #     signal_with_noise, last_std = make_noise_vectors(signal, smoothed_signal, target_SNR, last_std=last_std)
+        #     processed_noise_array[j, i, :] = process_dnn_signal(signal_with_noise, signal_dim, confidence=0.005)[:np.shape(processed_noise_array)[2]]
+        #     j += 1
+    print(np.mean(SNRs))
+    print(np.std(SNRs))
     return processed_noise_array, target_SNR_array
 
 
@@ -78,10 +80,10 @@ if __name__ == "__main__":
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    noise_filename = dir_name + "/signals_without_noise_[{}].npz".format(signal_dim)
-
+    # noise_filename = dir_name + "/signals_with_noise_2_[{0}].npz".format(signal_dim)
+    noise_filename = dir_name + "/signals_without_noise_[{0}].npz".format(signal_dim)
     # get noisy signals:
-    full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1, 21)))
+    # full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1, 41)))
     # processed_noise_array, SNRs = make_noise_signals(full_paths, max_target_SNR=12, signal_dim=signal_dim)
     # print("Saving signals...")
     #
@@ -93,19 +95,22 @@ if __name__ == "__main__":
     npzfile = np.load(noise_filename)
     processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 
-    SNRs = SNRs[SNRs==6]
-    # plt.show()
+    snr1, snr2 = 7, 5
+    SNRs = [8]#, SNRs[5]]
     for SNR, signals_with_noise in zip(SNRs, processed_noise_array):
         for i, signal in zip(range(len(signals_with_noise)), signals_with_noise):
-            if i > 17:
-                name = 'ecg_' + str(i+1) + '_SNR_' + str(SNR)
+            u = i+1
+            if np.logical_and(SNR == 9, u > 4) and np.logical_and(SNR == 9, u < 21):
+                name = 'ecg_' + str(u) + '_SNR_' + str(SNR)
+                print(name)
                 signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                             batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size)
+
                 running_ok = False
                 while not running_ok:
                     model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
-                    if i == 18:
-                        model.load(dir_name=signal2model.signal_directory, file_tag=model.get_file_tag(0, 1000))
-
+                    model.model_name = 'ecg_' + str(u) + '_SNR_' + str(12)
+                    model.load(model.get_file_tag(-5, -5), signal_directory)
+                    model.model_name = signal2model.model_name
                     running_ok = model.train(signal, signal2model)
 

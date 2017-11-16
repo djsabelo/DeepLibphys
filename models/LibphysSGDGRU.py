@@ -1,6 +1,5 @@
 import numpy as np
 
-from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models.LibphysGRU import LibphysGRU
 import theano

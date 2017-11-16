@@ -1,5 +1,4 @@
 import numpy as np
-from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from abc import ABCMeta, abstractmethod
 from DeepLibphys.utils.functions.signal2model import *
 import time
@@ -9,9 +8,9 @@ import os
 import theano
 import theano.tensor as T
 import matplotlib.pyplot as plt
+from DeepLibphys.utils.functions.common import *
 
 GRU_DATA_DIRECTORY = "/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/"
-
 
 class LibphysGRU:
     def __init__(self, signal2model, model_type, parameters):
@@ -171,9 +170,9 @@ class LibphysGRU:
                 Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
                                                                                 overlap=overlap, start_index=start_index)
 
-                n_for_each = n_for_each if n_for_each < np.shape(X_windows)[0] else np.shape(X_windows)[0]
-                n_for_each = n_for_each if n_for_each % self.mini_batch_size == 0 \
-                    else self.mini_batch_size * int(n_for_each/self.mini_batch_size)
+                # n_for_each = n_for_each if n_for_each < np.shape(X_windows)[0] else np.shape(X_windows)[0]
+                # n_for_each = n_for_each if n_for_each % self.mini_batch_size == 0 \
+                #     else self.mini_batch_size * int(n_for_each/self.mini_batch_size)
 
                 last_training_index = int(n_windows * train_ratio)
                 # List of the windows to be inserted in the dataset
@@ -210,10 +209,13 @@ class LibphysGRU:
                 # Save test data
                 # self.save_test_data(signal2model.signal_directory, [x_test, y_test])
 
+
         # Start time recording
         self.start_time = time.time()
         t1 = time.time()
-
+        # for x in x_train:
+        #     plt.plot(x)
+        #     plt.show()
         # Start training model
         if validation:
             returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval,
@@ -245,17 +247,18 @@ class LibphysGRU:
                     x_validation=None, y_validation=None):
         # print(x_train)
         # print(y_train)
+        self.start_time = time.time()
         if x_validation is None:
             x_validation = x_train
             y_validation = y_train
 
         loss = [self.calculate_total_loss(x_validation, y_validation)]
         lower_error_threshold, higher_error_threshold = [10**(-5), 1]
-        lower_error = 10**(-7)
-        lower_learning_rate = 10**(-5)
+        lower_error = signal2model.lower_error
+        lower_learning_rate = signal2model.lower_learning_rate
+        count_to_break_max = signal2model.count_to_break_max
         count_to_break = 0
         count_up_slope = 0
-        count_to_break_max = 10
         test_gradient = False
         is_nan = False
         last_parameters = self.get_parameters()
@@ -504,7 +507,7 @@ class LibphysGRU:
         npzfile = np.load(filename)
         return npzfile["test_data"]
 
-    def get_file_tag(self, dataset=0, epoch=-5):
+    def get_file_tag(self, dataset=-5, epoch=-5):
         """
         Gives a standard name for the file, depending on the #dataset and #epoch
         :param dataset: - int - dataset number

@@ -4,8 +4,7 @@ from DeepLibphys.utils.functions.common import segment_signal, ModelType
 from DeepLibphys.utils.functions.signal2model import *
 from DeepLibphys.models_dev.LibphysGRU import LibphysGRU
 import matplotlib.pyplot as plt
-import theano
-import theano.tensor as T
+import tensorflow as tf
 import time
 import sys
 import math
