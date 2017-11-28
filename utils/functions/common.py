@@ -25,6 +25,7 @@ RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibph
 FANTASIA_ECG = 'Fantasia/ECG/mat/'
 FANTASIA_RESP = 'Fantasia/RESP/mat/'
 CYBHi_ECG = 'CYBHi/data/long-term'
+CYBHi_ECG = 'CYBHi/data/short-term'
 
 
 """#####################################################################################################################
@@ -462,12 +463,12 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
                 if (index_names is not None) and (name not in index_names):
                     pass
                 else:
-                    signal = np.loadtxt(file)
+                    signal = np.loadtxt(file)[:, 3]
                     signal = sig.decimate(signal, 4)
                     N = len(signal)
                     time = len(signal)/fs
 
-                    for sample, i in zip(signal, range(len(signal))):
+                    for sample, i in zip(signal, range(N)):
                         if sample != 0:
                             signal = signal[i:]
                             break

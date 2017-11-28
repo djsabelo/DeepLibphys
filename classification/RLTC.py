@@ -92,8 +92,11 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
         signal2model = Signal2Model(model_info.dataset_name, "", signal_dim=model_info.Sd,
                                     hidden_dim=model_info.Hd, batch_size=Total_Windows,
                                     window_size=W)
-        X_list, Y_list = prepare_test_data([signal], signal2model, overlap=overlap,
-                                           batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol, randomize=False)
+        if type(signal[0]) is np.int64 or type(signal[0]) is np.float64:
+            signal = [signal]
+        X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
+                                           batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
+                                           randomize=False)
 
         X_matrix.append(X_list)
         Y_matrix.append(Y_list)
@@ -384,7 +387,7 @@ def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_accep
                 eer[j] = find_eeq(roc, j)
 
     print("end")
-    plot_roc(roc)
+    # plot_roc(roc)
     return eer, thresholds_out, candidate_index
 
 
@@ -424,10 +427,10 @@ def calculate_variables(loss_tensor, threshold=0.1, lvl_acceptance=5):
 
     timex.append(time.time())
 
-    print("Total Time: {0} s; ".format(timex[-1] - timex[0]), end="")
+    # print("Total Time: {0} s; ".format(timex[-1] - timex[0]), end="")
 
-    [print("Time {0}: {1} s; ".format(i, t - timex[i] ), end=";") for i, t in enumerate(timex[1:])]
-    print("")
+    # [print("Time {0}: {1} s; ".format(i, t - timex[i] ), end=";") for i, t in enumerate(timex[1:])]
+    # print("")
     return scores
 
 

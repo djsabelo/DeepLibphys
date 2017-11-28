@@ -228,7 +228,7 @@ ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
 
 ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i),
                               name="ECG "+str(i),
-                              directory="ECG_BIOMETRY[256.1024]")
+                              directory="BIOMETRY[256.1024]")
                     for i in range(1, 41)]
 
 ecg_1024_256_SNR_12 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_12",

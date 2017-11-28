@@ -37,14 +37,14 @@ def get_variables(param):
     return None
 
 
-mit_dir, processed_data_path, core_name = get_variables("arr")
+mit_dir, processed_data_path, core_name = get_variables("sinus")
 signals = np.load(processed_data_path)['signals']
 # for signal in signals:
 #     plt.plot(signal)
 #     plt.show()
 
 
-z = np.arange(20, np.shape(signals)[0])
+z = np.arange(16, np.shape(signals)[0])#(35, 43)
 # z = np.arange(22,33)
 # z = np.arange(33, 45)
 # z = np.arange(43,45)
@@ -66,6 +66,8 @@ for i, signal in zip(z, signals[z]):
 
         model.start_time = time.time()
         returned = model.train_model(x_train, y_train, signal2model)
+        # if i == 16:
+        #     model.load(dir_name=signal2model.signal_directory, file_tag=model.get_file_tag(0, 1000))
         if returned:
             model.save(signal2model.signal_directory, model.get_file_tag(-5, -5))
         running_ok = returned
