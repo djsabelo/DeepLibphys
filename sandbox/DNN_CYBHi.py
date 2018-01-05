@@ -880,8 +880,8 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
     plt.title(title)
 
     if savePdf:
-        print("Saving img_2/EER{0}.pdf".format(file))
-        pdf = PdfPages("img_2/EER{0}.pdf".format(file))
+        print("Saving img/EER{0}.pdf".format(file))
+        pdf = PdfPages("img/EER{0}.pdf".format(file))
         pdf.savefig(fig)
         plt.clf()
         pdf.close()
@@ -1204,7 +1204,7 @@ if __name__ == "__main__":
     batch_size = 128
     fs = 250
     window_size = 512
-    W = 512
+    W = 256
     save_interval = 1000
     iterations = 1
     bs = 60
@@ -1219,27 +1219,56 @@ if __name__ == "__main__":
     signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
     fileDir = "Data/CYBHi"
     signals = np.load(fileDir + "/signals.npz")["signals"]
-    signals = signals[list(range(12))+list(range(13,len(signals)))]
+    signals = signals[list(range(12))+list(range(13, len(signals)))]
     size = np.zeros(len(signals))
     all_models_info = []
     test_signals = []
-    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi{1}[64.{0}]".format(window_size, prefix)
 
+    pre = "[NO FILTER]"
+    loss_name = "M1_vs_M2"
 
+    prefix_name = 'ecg_cybhi_'
+    if loss_name[:2] == "M2":
+        name = 'ecg_cybhi_2_'
+
+    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
+    print(full_path)
+    test_windows_xs = []
+    test_windows_ys = []
     for s, signal_data in enumerate(signals):
-        name = 'ecg_cybhi_' + signal_data.name
-        all_models_info.append(ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
-                                         DS=-5, t=-5, W=W, name="CYBHi {0}".format(s)))
-        test_signals.append(signal_data.processed_test_windows)
+        name = prefix_name + signal_data.name
+        if loss_name[-2:] == "M2":
+            test_signals.append(signal_data.processed_test_windows)
+        else:
+            test_signals.append(signal_data.processed_train_windows)
 
-    RLTC.get_or_save_loss_tensor(full_path, None, W=window_size, models=all_models_info,
-                                 test_signals=test_signals, force_new=False, mean_tol=0.8,
-                                 overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=1000)
+        model_info = ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
+                               DS=-5, t=-5, W=W, name="CYBHi {0}".format(s))
 
-    for i in [15, 40, 58]:
+        all_models_info.append(model_info)
+        all_indexes, test_windows_x, test_windows_y, _, _ = get_clean_indexes(test_signals[-1],
+                                                                              model_info.to_signal2model(),
+                                                                              overlap=0.11,
+                                                                              max_tol=0.7)
+        if loss_name[-2:] == loss_name[:2]:
+            test_windows_xs.append(test_windows_x[int(len(test_windows_x) * 0.5):])
+            test_windows_ys.append(test_windows_y[int(len(test_windows_x) * 0.5):])
+        else:
+            test_windows_xs.append(test_windows_x)
+            test_windows_ys.append(test_windows_y)
+
+    loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=all_models_info,
+                                               test_signals=test_signals,
+                                               X_matrix=test_windows_xs, Y_matrix=test_windows_ys, force_new=True,
+                                               mean_tol=0,
+                                               overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=1000000)
+
+
+    for i in [1, 10, 30, 60]:
         RLTC.identify_biosignals(loss_tensor, all_models_info, batch_size=i)
 
-    EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, True, batch_size=60, decimals=5)
+    EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
+                                         batch_size=60, decimals=5)
     # good_indices = np.where(size > limit)[0]
 
     # test_signals = [test_signals[i] for i in good_indices]

@@ -1,6 +1,51 @@
+class ModelInfo:
+    Sd, Hd, dataset_name, directory, name, DS, t, W = 0, 0, "", "", "", -5, -5, 256
 
-from DeepLibphys.utils.functions.database import SignalType
+    def __init__(self, Sd=64, Hd=256, dataset_name="", directory="", DS=-5, t=-5, W=256, name="model"):
+        """
+        :param Sd: signal_dimension
+        :param Hd: hidden_dimension
+        :param dataset_name: signal_name - name in which the model was saved
+        :param directory: where the model was saved
+        :param DS: recorded dataset #
+        :param t:  recorded epoch # for corresponding dataset
+        :param W: default window size
+        :param name: model name to be displayed
+        """
 
+        self.Sd = Sd
+        self.Hd = Hd
+        self.dataset_name = dataset_name
+        self.directory = directory
+        self.name = name
+        self.Sd = Sd
+        self.t = t
+        self.W = W
+        self.DS = DS
+
+    def to_signal2model(self):
+        return Signal2Model(self.dataset_name,
+                            self.directory,
+                            signal_dim=self.Sd,
+                            hidden_dim=self.Hd,
+                            window_size=self.W)
+
+
+class SignalInfo:
+    type, directory, index, size, name, file_name = "", "", 0, 0, "", ""
+
+    def __init__(self, type, directory, index, size, name, file_name=""):
+        self.type = type
+        self.directory = directory
+        self.index = index
+        self.size = size
+        self.name = name
+        self.file_name = file_name
+
+
+#TODO: Make SignalType Default in all functions
+class SignalType:
+    EEG, ECG, EMG, GSR, RESP, ACC, BIOMETRIC_ACC, OTHER = range(8)
 
 class ModelType:
     MINI_BATCH, SGD, CROSS_SGD, CROSS_MBSGD = range(4)

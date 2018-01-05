@@ -147,8 +147,8 @@ def plot_errs(EERs, time, labels, title="", file="_iterations", savePdf=False, p
     plt.title(title)
 
     if savePdf:
-        print("Saving img_2/EER{0}.pdf".format(file))
-        pdf = PdfPages("img_2/EER{0}.pdf".format(file))
+        print("Saving img/EER{0}.pdf".format(file))
+        pdf = PdfPages("img/EER{0}.pdf".format(file))
         pdf.savefig(fig)
         plt.clf()
         pdf.close()

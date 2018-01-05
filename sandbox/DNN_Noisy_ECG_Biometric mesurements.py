@@ -709,7 +709,7 @@ def process_EER(loss_tensor, N_Windows, W, iterations=10, title = None, s_labels
     if titles is not None:
         plt.title("Mean EER for different SNR")
 
-    pdf = PdfPages("img_2/EER_with_noise.pdf")
+    pdf = PdfPages("img/EER_with_noise.pdf")
     pdf.savefig(fig)
     pdf.close()
 

@@ -81,38 +81,55 @@ def normalize_theano_tensor(loss_tensor, lvl_acceptance):
     normalized_loss_tensor = normalizexx_loss_tensor(normalized_loss_tensor, cropx)
     return np.nan_to_num(normalized_loss_tensor)
 
+def loss_worker(x_matrix, y_matrix, signal):
+    return
+
 # LOSS FUNCTION
 def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0, overlap=0.33,
-                          batch_percentage=0, mini_batch=256, std_tol=10000):
-    X_matrix = []
-    Y_matrix = []
+                          batch_percentage=0, mini_batch=256, std_tol=10000, X_matrix=None, Y_matrix=None,
+                          min_windows=0.5):
+
+    if X_matrix is None and Y_matrix is None:
+        prepare_data = True
+        X_matrix = []
+        Y_matrix = []
+    else:
+        prepare_data = False
 
     sizes = []
-    for signal, model_info in zip(signals, signals_models):
+    for signal, model_info, i in zip(signals, signals_models, range(len(signals))):
         signal2model = Signal2Model(model_info.dataset_name, "", signal_dim=model_info.Sd,
                                     hidden_dim=model_info.Hd, batch_size=Total_Windows,
                                     window_size=W)
         if type(signal[0]) is np.int64 or type(signal[0]) is np.float64:
             signal = [signal]
-        X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
-                                           batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
-                                           randomize=False)
 
-        X_matrix.append(X_list)
-        Y_matrix.append(Y_list)
+        if prepare_data:
+            X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
+                                               batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
+                                               randomize=False)
+            if np.shape(X_list)[0] > min_windows:
+                X_matrix.append(X_list)
+                Y_matrix.append(Y_list)
+                sizes.append(np.shape(X_list)[0])
+        else:
+            print(np.shape(X_matrix[i]))
+            sizes.append(np.shape(X_matrix[i])[0])
 
-        sizes.append(np.shape(X_list)[0])
+    print(np.shape(X_matrix))
 
     max_windows = np.min(np.array(sizes))
     for t, test_signal in enumerate(X_matrix):
         X_matrix[t] = test_signal[:max_windows]
         Y_matrix[t] = Y_matrix[t][:max_windows]
+    print(np.shape(X_matrix))
 
     X_matrix, Y_matrix = np.array(X_matrix), np.array(Y_matrix)
     max_windows = max_windows - (max_windows % mini_batch)
     print("Number of Windows: {0} of {1}".format(max_windows, np.max(np.array(sizes))))
 
     windows = np.arange(0, max_windows, mini_batch)
+    print(windows)
     N_Models = len(signals_models)
     N_Signals = len(signals)
 
@@ -124,38 +141,49 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
     signal2Model = Signal2Model(model_info.dataset_name, model_info.directory, signal_dim=model_info.Sd,
                                 hidden_dim=model_info.Hd, mini_batch_size=mini_batch)
     model = GRU.LibphysMBGRU(signal2Model)
-
+    times = []
     for m, model_info in zip(range(len(signals_models)), signals_models):
         model.model_name = model_info.dataset_name
         model.load(dir_name=model_info.directory)
-        print("Processing Model " + model_info.name)
+        print("Processing Model " + model_info.name + " - time: " + str(model.train_time))
 
         for s in range(N_Signals):
             print("Calculating loss for ECG " + str(s + 1), end=';\n ')
             for w in windows:
                 x_test = X_matrix[s, w:w + mini_batch, :]
                 y_test = Y_matrix[s, w:w + mini_batch, :]
+                tic = time.time()
                 loss_tensor[m, s, w:w + mini_batch] = np.asarray(model.calculate_mse_vector(x_test, y_test))
+                times.append(tic - time.time())
 
+    times = np.array(times)
+    print(np.size(loss_tensor, 2))
+    print("Statistics: \n Mean time: {0}; \n Std time: {1}; Max time: {2}; Min Time: {3}".format(
+        np.mean(times), np.std(times), np.max(times), np.min(times)))
     return loss_tensor
 
 
-def get_or_save_loss_tensor(full_path, N_Windows=None, W=None, models=None, test_signals=None, force_new=False, mean_tol=0,
-                            overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000):
-    if not os.path.isfile(full_path) or force_new:
+def get_or_save_loss_tensor(full_path, N_Windows=None, W=None, models=None, test_signals=None, force_new=False,
+                            mean_tol=1, overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000,
+                            X_matrix=None, Y_matrix=None):
+    if (not os.path.isfile(full_path) or not os.path.isfile(full_path + '.npz')) or force_new:
         loss_tensor = calculate_loss_tensor(N_Windows, W, models, test_signals, mean_tol=mean_tol, overlap=overlap,
-                                            batch_percentage=batch_percentage, mini_batch=mini_batch, std_tol=std_tol)
+                                            batch_percentage=batch_percentage, mini_batch=mini_batch, std_tol=std_tol,
+                                            X_matrix=X_matrix, Y_matrix=Y_matrix)
         np.savez(full_path, loss_tensor=loss_tensor)
+        print("Saving to {0}".format(full_path))
+    elif os.path.isfile(full_path + '.npz'):
+        loss_tensor = np.load(full_path + '.npz')["loss_tensor"]
     else:
         loss_tensor = np.load(full_path)["loss_tensor"]
 
     return loss_tensor
 
 
-def calculate_batch_min_loss(loss_tensor, batch_size):
-    N_Models = np.shape(loss_tensor)[0]
-    N_Signals = np.shape(loss_tensor)[1]
-    N_Total_Windows = np.shape(loss_tensor)[2] - (np.shape(loss_tensor)[2] % batch_size)
+def calculate_batch_min_loss(loss_z_tensor, batch_size):
+    N_Models = np.shape(loss_z_tensor)[0]
+    N_Signals = np.shape(loss_z_tensor)[1]
+    N_Total_Windows = np.shape(loss_z_tensor)[2] - (np.shape(loss_z_tensor)[2] % batch_size)
     batch_indexes = np.arange(0, N_Total_Windows, batch_size)
     N_Batches = len(batch_indexes)
     if N_Batches == 0:
@@ -165,7 +193,7 @@ def calculate_batch_min_loss(loss_tensor, batch_size):
     print(batch_size, end=" - ")
 
     for x, i in enumerate(batch_indexes):
-        loss_batch = loss_tensor[:, :, i:i + batch_size]
+        loss_batch = loss_z_tensor[:, :, i:i + batch_size]
         temp_loss_tensor[:, :, x] = np.min(loss_batch, axis=2)
 
     return temp_loss_tensor
@@ -190,14 +218,86 @@ def calculate_batch_mean_loss(loss_tensor, batch_size):
     return temp_loss_tensor
 
 
+def filter_loss_tensor(signals, loss_tensor, all_models_info, W, min_windows=512, overlap=0.33, max_tol=0.8,
+                       std_tol=0.5, batch_percentage=0, already_cut=False):
+    model_indexes = []
+    list_of_windows_indexes = []
+    number_of_windows = []
+    try:
+        signals[0][0]
+    except TypeError:
+        signals = [signals]
+
+    for i, model_info in enumerate(all_models_info):
+        signal2model = Signal2Model(model_info.dataset_name, "", signal_dim=model_info.Sd,
+                                    hidden_dim=model_info.Hd, batch_size=np.shape(loss_tensor)[2],
+                                    window_size=W)
+        indexes, _, _, _, _ = get_clean_indexes(signals[i], signal2model, overlap=overlap, max_tol=max_tol,
+                                                std_tol=std_tol, already_cut=already_cut)
+        indexes = np.array(indexes)
+        if batch_percentage > 0:
+            all_indexes, _, _, _, _ = get_clean_indexes(signals[i], signal2model, overlap=overlap, max_tol=0.7)
+            all_indexes = all_indexes[int(len(all_indexes)*batch_percentage):]
+
+            new_indexes = []
+            for ind in indexes[indexes >= all_indexes[0]]:
+                if np.any(all_indexes == ind):
+                    new_indexes.append(ind)
+
+            indexes = new_indexes
+
+        if len(indexes) >= min_windows + 20:
+            model_indexes.append(i)
+            list_of_windows_indexes.append(indexes)
+            number_of_windows.append(len(indexes))
+
+    li = 0
+    new_models_indexes = []
+    indexes_2_remove = []
+    Total = min(number_of_windows)
+    loss_list = np.zeros((len(model_indexes), len(model_indexes), Total - 1))
+    for i, inds in zip(model_indexes, list_of_windows_indexes):
+        first_index = 0
+        if len(inds) > Total:# + 20:
+            first_index = np.random.random_integers(0, len(inds) - Total - 20, 1)[0]
+        end_index = first_index + Total - 1
+
+        if inds[end_index] > np.shape(loss_tensor)[2]:
+            first_index = 0
+            end_index = first_index + Total - 1
+
+        if inds[end_index] < np.shape(loss_tensor)[2]:
+            L = loss_tensor[i][model_indexes][:, inds[first_index:end_index]]
+            if np.shape(L)[1] > 0:
+                loss_list[li] = L
+                new_models_indexes.append(i)
+        if np.alltrue(loss_list[li] == np.zeros_like(loss_list[li])):
+            indexes_2_remove.append(li)
+
+        li += 1
+
+    if indexes_2_remove != []:
+        mask = mask_without_indexes(loss_list, indexes_2_remove)
+        loss_list = loss_list[mask][:, mask]
+
+    model_indexes = new_models_indexes
+    print("Rejected {0} people, total of windows = {1}".format(len(all_models_info) - len(model_indexes), Total))
+
+    if model_indexes != []:
+        return loss_list, np.array(all_models_info)[np.array(model_indexes)]
+    else:
+        print("All models were rejected")
+        return []
+
+
 # IDENTIFICATION
 
 
-def identify_biosignals(loss_tensor, models_info, batch_size=1, thresholds=1):
+def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1):
     if batch_size > 1:
-        temp_loss_tensor = calculate_batch_min_loss(loss_tensor, batch_size)
+        temp_loss_tensor = calculate_batch_min_loss(loss_x_tensor, batch_size)
     else:
-        temp_loss_tensor = loss_tensor
+        temp_loss_tensor = loss_x_tensor
 
     model_labels = np.asarray(np.zeros(len(models_info) * 2, dtype=np.str), dtype=np.object)
     model_labels[list(range(1, len(models_info) * 2, 2))] = [model_info.name for model_info in models_info]
@@ -290,19 +390,23 @@ def calculate_classification_matrix(loss_tensor):
 # EQUAL ERROR RATE
 
 
-def process_eers(loss_tensor, W, full_path, name, save_pdf=True, batch_size=120, fs=250, decimals=4):
+def process_eers(loss_tensor, W, full_path, name, save_pdf=True, batch_size=120, fs=250, decimals=4,  force_new=True):
     batch_size_array = np.arange(1, batch_size)
     seconds = batch_size_array * 0.33 * W / fs
-
-    EERs, thresholds, candidate_indexes = calculate_err_in_different_batches(loss_tensor, batch_size_array, decimals)
-
-    np.savez(full_path + "/" + name + "_EER.npz", EERs=EERs, thresholds=thresholds, candidate_indexes=candidate_indexes)
+    directory = full_path
+    full_path = full_path + "/" + name + "_EER.npz"
+    if not os.path.isfile(full_path) or force_new:
+        EERs, thresholds, candidate_indexes = calculate_err_in_different_batches(loss_tensor, batch_size_array, decimals)
+        np.savez(full_path, EERs=EERs, thresholds=thresholds, candidate_indexes=candidate_indexes)
+    else:
+        file = np.load(full_path)
+        EERs, thresholds, candidate_indexes = file["EERs"], file["thresholds"], file["candidate_indexes"]
 
     if save_pdf:
         labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_tensor)[0] + 1)]
-        plot_errs(EERs, seconds, labels, full_path, name, "Mean EER", savePdf=save_pdf)
+        plot_errs(EERs, seconds, labels, directory, name, "Mean EER", savePdf=save_pdf)
 
-    return np.mean(EERs, axis=0).T, thresholds, batch_size_array
+    return EERs, thresholds, batch_size_array
 
 
 def calculate_err_in_different_batches(loss_tensor, batch_size_array, decimals=4):
@@ -344,8 +448,8 @@ def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_accep
     thresholds = np.unique(np.round(normalize_tensor(loss, lvl_acceptance), decimals))
     thresholds = np.insert(thresholds, [0, len(thresholds)], [first_index, last_index])
     thresholds = np.sort(thresholds)
-    # print(thresholds)
     n_thresholds = len(thresholds)
+    print("Number of Thresholds: {0}".format(n_thresholds))
     N_Models = np.shape(loss)[0]
     N_Signals = np.shape(loss)[1]
     eer = np.zeros(N_Signals) - 1

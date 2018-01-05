@@ -102,8 +102,8 @@ def plot_errs(EERs, time, labels, title="", file="_iterations", savePdf=False, p
     plt.title(title)
 
     # if savePdf:
-    print("Saving img_2/EER{0}.pdf".format(file))
-    dir_name = SNR_DIRECTORY+"/img_2"
+    print("Saving img/EER{0}.pdf".format(file))
+    dir_name = SNR_DIRECTORY+"/img"
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 

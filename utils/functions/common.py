@@ -14,6 +14,9 @@ from novainstrumentation.smooth import smooth
 from scipy.interpolate import griddata
 from sklearn.model_selection import train_test_split
 from matplotlib.backends.backend_pdf import PdfPages
+import pandas
+from multiprocessing import Pool
+from itertools import repeat
 import sys
 
 import DeepLibphys.models.libphys_GRU as GRU
@@ -464,7 +467,7 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
                     pass
                 else:
                     signal = np.loadtxt(file)[:, 3]
-                    signal = sig.decimate(signal, 4)
+                    # signal = sig.decimate(signal, 4)
                     N = len(signal)
                     time = len(signal)/fs
 
@@ -504,53 +507,66 @@ def sort_index_by_key(key_array):
 def sort_by_key(key_array, array_2_sort):
     return np.array(array_2_sort)[sort_index_by_key(key_array)]
 
-def get_mit_dataset_files(signal_dim, val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False, confidence=0.001):
-    full_paths = os.listdir(dataset_dir)
-    signals = []
-    fs = 128
+
+def get_multi_processed_signal(file_path, fs, dataset_dir, signal_dim, confidence):
     first_list = ["221m", "202m"]
     second_list = ["19830m", "14172m", "17453m", "14134m", "114m", "228m", "109m", "213m"]
     third_list = ["108m", "207m", "119m", "14046m", "14184m"]
-    for file_path in full_paths:
-        if file_path[-3:] == "mat":
-            file = dataset_dir+'/'+file_path
-            print("Processing file: {0}".format(file))
-            try:
-                # if any(file_path[:-4] in s for s in (first_list + second_list + third_list)):
-                    signal = sio.loadmat(file)[val][row][3000:903000]
-                    N = len(signal)
-                    time = len(signal)/fs
-                    iter_ = scp.interpolate.interp1d(np.arange(0, time, 1/fs), signal)
-                    t = np.arange(0, time-1/250, 1/256)
-                    signal = iter_(t)
-                    # signal = sig.decimate(signal, 2)
-                    if any(file_path[:-4] in s for s in first_list):
-                        signal = process_dnn_signal(signal, signal_dim, confidence=0.01)
-                    elif any(file_path[:-4] in s for s in second_list):
-                        signal = process_dnn_signal(signal, signal_dim, confidence=0.02)
-                    elif any(file_path[:-4] in s for s in third_list):
-                        signal = process_dnn_signal(signal, signal_dim, confidence=0.03)
-                    else:
-                        signal = process_dnn_signal(signal, signal_dim, confidence=confidence)
 
-            # "223m", "106m", "222" - > experimentar o moving_std
-                    signals.append(signal)
+    if file_path[-3:] == "mat":
+        file = dataset_dir + '/' + file_path
+        print("Processing file: {0}".format(file))
+        try:
+            # if any(file_path[:-4] in s for s in (first_list + second_list + third_list)):
+            signal = sio.loadmat(file)['val'][0][3000:3000 + fs * 3600]
+            time = len(signal) / fs
+            # plt.figure(file_path)
+            # plt.plot(np.arange(len(signal))/fs, signal/np.max(signal))
+            signal = smooth(signal)
+            # plt.plot(np.arange(len(signal))/fs, signal/np.max(signal))
+            smooth_win = 20
+            N = len(signal)
+            iter_ = scp.interpolate.interp1d(np.arange(0, time, 1 / fs), signal)
+            t = np.arange(0, time - 1 / 250, 1 / 250)
+            signal = iter_(t)
+            if fs < 250:
+                signal = sig.decimate(signal, 2)
 
-            #
-            #         if peak_into_data:
-                    if peak_into_data == True:
-                        plt.title(file_path)
-                        plt.plot(signal)
-                        plt.show()
+            if any(file_path[:-4] in s for s in first_list):
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.01)
+            elif any(file_path[:-4] in s for s in second_list):
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.02)
+            elif any(file_path[:-4] in s for s in third_list):
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.03)
+            else:
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=confidence)
+            # plt.plot(np.arange(len(signal)) / 250, signal / np.max(signal))
+            # plt.show()
+                # "223m", "106m", "222" - > experimentar o moving_std
+            return signal
 
-                # plt.plot(signal)
-                # plt.show()
-                    print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
-            except ValueError:
-                print("Error")
-                pass
 
-    return signals
+            print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
+        except ValueError:
+            return None
+
+
+def get_mit_dataset_files(signal_dim, type='arr', val='val', row=0, dataset_dir=FANTASIA_ECG, peak_into_data=False, confidence=0.001):
+    full_paths = os.listdir(dataset_dir)
+    fs = 128
+    if type == 'arr':
+        fs = 360
+        print(fs)
+    pool = Pool(12)
+
+    sigs = pool.starmap(get_multi_processed_signal, zip(full_paths, repeat(fs),
+                                                       repeat(dataset_dir), repeat(signal_dim), repeat(confidence)))
+    signals = []
+    for sig in sigs:
+        if sig is not None:
+            signals.append(sig)
+
+    return np.array(signals)
 
 
 # def get_fantasia_noisy_data(signal_dim, example_index_array, noisy_index, dataset_dir, peak_into_data, regression, smooth_window=10):
@@ -631,7 +647,15 @@ def get_signals(signal_dim, dataset_dir, peak_into_data=False, decimate=None, va
 
     return signals, y_train
 
-import pandas
+
+def extract_test_part(signals, ratio=0.33, overlap=0.33):
+    return [signal[int(len(signal) * ratio + (1 / overlap) - 1):] for signal in signals]
+
+
+def extract_train_part(signals, ratio=0.33):
+    return [signal[:int(len(signal) * ratio)] for signal in signals]
+
+
 def get_biometric_signals(signal_dim, dataset_dir, index, peak_into_data=False, decimate=None, smooth_window=10, regression=False):
     [id, id_test, id_train] = get_biometric_question(dataset_dir, index)
     print("Loading biometric data - id: {0} - train: {1} - test {2}".format(id, id_train, id_test))
@@ -1359,13 +1383,26 @@ def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#
         txt = ax.text(0.5, 0.9, str(rejection)+"%", ha='center', **kwargs)
         txt.set_path_effects([pte.Stroke(linewidth=2, foreground='white'), pte.Normal()])
 
+
 def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_mean=True):
     cmap = mpl.cm.get_cmap('rainbow')
     fig = plt.figure("fig", figsize=(900 / 96, 600 / 96), dpi=96)
     for i, EER in zip(range(len(EERs)), EERs):
-        plt.plot(time, EER, '.', color=cmap(i / len(EERs)), alpha=0.1)
-        plt.plot(time, EER, color=cmap(i / len(EERs)), alpha=0.1, label=labels[i])
-    params = {'legend.fontsize': 3}
+        alph = 0.1
+        if not plot_mean:
+            alph = 0.6
+        plt.plot(time, EER, '.', color=cmap(i / len(EERs)), alpha=alph)
+        plt.plot(time, EER, color=cmap(i / len(EERs)), alpha=alph, label=labels[i])
+
+    font_s = 3
+    if len(EERs) <= 40:
+        font_s = 6
+    if len(EERs) <= 20:
+        font_s = 10
+    if len(EERs) <= 10:
+        font_s = 12
+
+    params = {'legend.fontsize': font_s}
     plt.rcParams.update(params)
 
     if plot_mean:
@@ -1406,7 +1443,9 @@ def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_
             plt.annotate("EER MIN = {0:.3f}%".format(EER[index_min] * 100),
                          xy=(time[index_min], EER[index_min] + 0.01), color=cmap(i / len(EERs)), ha='center')
 
-    plt.legend()
+    legend = plt.legend(bbox_to_anchor=(1.1, 1.01), frameon=True)
+    legend.get_frame().set_facecolor('white')
+    # plt.legend(bbox_to_anchor=(1.1, 1.01))
     plt.title(title)
 
     if savePdf:
@@ -1661,45 +1700,19 @@ def randomize_batch(x_windows, y_windows, batch_size=None):
     else:
         return x_windows[:, window_indexes[0:batch_size], :], y_windows[:, window_indexes[0:batch_size], :]
 
-def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=0.6, std_tol=100, randomize=True):
-    x__matrix, y__matrix = [], []
+
+def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=0.6, std_tol=100,
+                      randomize=True):
+
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
-    reject = 0
-    total = 0
-    windows_standard_deviation = []
-    ws = []
-    windows_amplitude = []
-    small_windows = []
-    indexes = []
-    for w, window in enumerate(windows):
-        if len(window) > window_size + 1:
-            for s_w in range(0, len(window) - window_size - 1, int(window_size * overlap)):
-                small_windows.append(np.round(window[s_w:s_w + window_size]))
-                windows_standard_deviation.append(np.std(small_windows[-1]))
-                windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
-                indexes.append(s_w)
 
-    stw_median = np.median(windows_standard_deviation)
-    limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
-    rejected_windows = []
-    for amp, stw, window, i in zip(windows_amplitude, windows_standard_deviation, small_windows, indexes):
-        if (amp > mean_tol * signal2model.signal_dim) and (limits[0] <= stw <= limits[1]):
-            x__matrix.append(window[:-1])
-            y__matrix.append(window[1:])
-        else:
-            rejected_windows.append(i)
-            reject += 1
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap, max_tol=mean_tol,
+                                                                     std_tol=std_tol)
 
-        total += 1
-    #
-    # plt.plot( windows[0])
-    # for w in rejected_windows:
-    #     plt.plot(np.arange(w, w+window_size), windows[0][np.arange(w, w+window_size)], 'k')
-
-    # plt.show()
     x__matrix = np.array(x__matrix)
     y__matrix = np.array(y__matrix)
+    print(len(x__matrix))
 
     end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
     max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
@@ -1713,5 +1726,100 @@ def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, m
     else:
         indexes = end_train_index + np.arange(int(batch_size))
 
-    print("Windows of {0}: {1}; Rejected: {2} of {3}".format(signal2model.model_name, batch_size, reject, total))
+
     return x__matrix[indexes], y__matrix[indexes]
+
+
+def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10000000, already_cut=False):
+    x__matrix, y__matrix = [], []
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+    reject = 0
+    total = 0
+    windows_standard_deviation = []
+    ws = []
+    windows_amplitude = []
+    small_windows = []
+    indexes = []
+    for w, window in enumerate(windows):
+        if already_cut:
+            small_windows.append(window)
+            windows_standard_deviation.append(np.std(small_windows[-1]))
+            windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+            indexes.append(s_w)
+        elif len(window) > window_size + 1:
+            for s_w in range(0, len(window) - window_size - 1, int(window_size * overlap)):
+                small_windows.append(np.round(window[s_w:s_w + window_size]))
+                windows_standard_deviation.append(np.std(small_windows[-1]))
+                windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+                indexes.append(s_w)
+
+    stw_median = np.median(windows_standard_deviation)
+    limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    rejected_windows = []
+    aproved_indexes = []
+    index = 0
+    for amp, stw, window, i in zip(windows_amplitude, windows_standard_deviation, small_windows, indexes):
+        if (amp > max_tol * signal2model.signal_dim) and (limits[0] <= stw <= limits[1]):
+            aproved_indexes.append(index)
+            x__matrix.append(window[:-1])
+            y__matrix.append(window[1:])
+        else:
+            rejected_windows.append(i)
+            reject += 1
+        index += 1
+        total += 1
+
+    print("Windows of {0}: {1}; Rejected: {2} of {3}".format(signal2model.model_name, batch_size, reject, total))
+    return aproved_indexes, x__matrix, y__matrix, reject, total
+
+
+def mask_without_indexes(array_list, indexes):
+    mask = np.ones(len(array_list), dtype=bool)
+    mask[indexes] = False
+    return mask
+
+
+from matplotlib.widgets import Button
+def windows_selection(x_train, y_train):
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
+    l, = plt.plot(x_train[0], lw=2)
+    plt.ylim([-1, 257])
+
+    class BooleanSwitcher(object):
+        indexes = []
+        ind = 0
+
+        def yes(self, event):
+            if self.ind < len(x_train):
+                self.indexes.append(self.ind)
+                self.ind += 1
+            if self.ind < len(x_train):
+                l.set_ydata(x_train[self.ind])
+                plt.draw()
+            else:
+                self.crop()
+                plt.close()
+
+        def no(self, event):
+            self.ind += 1
+            if self.ind < len(x_train):
+                l.set_ydata(x_train[self.ind])
+                plt.draw()
+            else:
+                self.crop()
+                plt.close()
+
+        def crop(self):
+            c = len(self.indexes) % 16
+            self.indexes = self.indexes[:(len(self.indexes) - c)]
+    callback = BooleanSwitcher()
+    axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+    axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+    by = Button(axnext, 'Yes')
+    by.on_clicked(callback.yes)
+    bn = Button(axprev, 'No')
+    bn.on_clicked(callback.no)
+    plt.show()
+    return x_train[callback.indexes], y_train[callback.indexes]

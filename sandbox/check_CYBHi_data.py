@@ -114,6 +114,7 @@ win = 512
 fs = 250
 clusters = 4
 
+
 # Load Signal and Info
 # fileDir = "Data/CYBHi-short"
 # cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/short-term'
@@ -121,6 +122,12 @@ clusters = 4
 fileDir = "Data/CYBHi"
 cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/long-term'
 full_processed_dir = fileDir + "/raw_signals.npz"
+
+
+file = np.load(fileDir+"/signals.npz")
+signals_info = file["signals"]
+names = [signal_info.name for signal_info in signals_info]
+
 train_dates, train_names1, train_signals1, test_dates1, test_names1, test_signals = \
     get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG)
 
@@ -136,9 +143,20 @@ file = np.load(full_processed_dir)
 train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
     file["train_dates"], file["train_names"], file["train_signals"], file["test_dates"],file["test_names"], \
     file["test_signals"]
-for sig1, sig2 in zip(train_signals, test_signals):
-    plt.plot(train_signals)
-    plt.show()
+
+
+file = np.load(fileDir+"/signals.npz")
+signals_info = file["signals"]
+names = [signal_info.name for signal_info in signals_info]
+for i, name in enumerate(train_names):
+    if name not in names:
+        plt.figure("Train of "+name)
+        plt.plot(train_signals[i])
+        plt.figure("Test of "+name)
+        plt.plot(test_signals[test_names == "name"])
+
+plt.show()
+print(SSS)
 
 train_signalz, test_signalz, names = [], [], []
 for train_name, test_name in zip(train_names, test_names):
@@ -148,7 +166,7 @@ for train_name, test_name in zip(train_names, test_names):
     test_signalz.append(test_signal)
     names.append(train_name)
 
-file = fileDir+"/signals.npz"
+file = fileDir+"/signalz.npz"
 
 # np.savez(fileDir+"/signalz.npz", test_signals=test_signalz, train_signals=train_signalz, names=names)
 #

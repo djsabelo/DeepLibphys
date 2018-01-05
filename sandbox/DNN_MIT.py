@@ -17,60 +17,64 @@ import seaborn
 from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
 
-GRU_DATA_DIRECTORY = "../data/trained/"
-SNR_DIRECTORY = "../data/validation/June_MIT"
+VALIDATION_DIRECTORY = "../data/validation/Dec_MIT"
+
+
+def get_variables(param):
+    if param == "arr":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Arrythmia', '../data/processed/biometry_mit[256].npz', 'ecg_mit_arrythmia_'
+    if param == "sinus":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Sinus', '../data/processed/biometry_mit_sinus[256].npz', 'ecg_mit_sinus_'
+    if param == "long":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Long-Term', '../data/processed/biometry_mit_long_term[256].npz', \
+                'ecg_mit_long_term_'
+
+    return None
 
 
 if __name__ == "__main__":
-    N_Windows = 256
-    W = 512
+    N_Windows = None
+    W = 1024
     signal_dim = 256
     hidden_dim = 256
     mini_batch_size = 16
-    batch_size = 128
+    batch_size = 256
     window_size = 512
     save_interval = 1000
     fs = 250
-    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    loss_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
 
-    mit_dir = RAW_SIGNAL_DIRECTORY + 'MIT-Arrythmia'
-    processed_mit_data_path = '../data/processed/biometry_mit[256].npz'
-    mit_dir = RAW_SIGNAL_DIRECTORY + 'MIT-Sinus'
-    processed_data_path = '../data/processed/biometry_mit_sinus[256].npz'
-    core_name = 'ecg_mit_sinus_'
-    # mit_dir = RAW_SIGNAL_DIRECTORY + 'MIT-Long-Term'
-    # processed_data_path = '../data/processed/biometry_mit_long_term[256].npz'
-    # core_name = 'ecg_mit_mit_long_term_'
+    signals = []
+    all_models_info = []
+    s_i = 1
+    for s_index, db_name in enumerate(["arr", "sinus", "long"]):
+        mit_dir, processed_data_path, core_name = get_variables(db_name)
+        signals_aux = np.load(processed_data_path)['signals']
+        signals += extract_test_part(signals_aux)
+        all_models_info += [ModelInfo(Hd=256, Sd=256, dataset_name=core_name+str(i),
+                                      name="MIT " + str(s_i + (i)),
+                                      directory=loss_directory)
+                            for i in range(0, np.shape(signals_aux)[0])]
+        s_i += np.shape(signals_aux)[0]
 
-    signals = np.load(processed_data_path)['signals']
-    processed_data_path = '../data/processed/biometry_mit_long_term[256].npz'
-    signals = signals.tolist() + np.load(processed_data_path)['signals'].tolist() #\
-              #+ np.load(processed_mit_data_path)['signals'].tolist()
+    filename = VALIDATION_DIRECTORY + "/MIT_LOSS[{0}].npz".format(W)
+    loss_tensor = RLTC.get_or_save_loss_tensor(filename, N_Windows, W, all_models_info, signals, force_new=True,
+                                               mean_tol=0.5, std_tol=2)
 
-    for i, s in enumerate(signals):
-        signals[i] = s[int(len(s)*0.33):]
+    # X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
+    #                                    batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
+    #                                    randomize=False)
+    loss_tensor, all_models_info = RLTC.filter_loss_tensor(signals, loss_tensor, all_models_info, W,
+                                                             min_windows=256, max_tol=0.9, std_tol=0.5)
+    loss_tensor_ = np.copy(loss_tensor)
+    # mask = mask_without_indexes(loss_tensor, [2, 30, 39, 40, 49, 51, 57, 63])
+    # loss_tensor = loss_tensor[mask][:, mask]
+    for i in [1, 60, 120, 240]:
+        RLTC.identify_biosignals(loss_tensor, all_models_info, batch_size=i)
 
-    signals = np.array(signals)
-    all_models_info = [ModelInfo(Hd=256, Sd=256, dataset_name=core_name+str(i),
-                        name="MIT "+str(i+1),
-                        directory="ECG_BIOMETRY[256.512]")
-              for i in range(0, 18)] \
-                      + [ModelInfo(Hd=256, Sd=256, dataset_name='ecg_mit_long_term_'+str(i),
-                        name="MIT "+str(i+19),
-                        directory="ECG_BIOMETRY[256.512]")
-              for i in range(0, 6)]
-    # \
-    #                 + [ModelInfo(Hd=256, Sd=256, dataset_name='ecg_mit_' + str(i),
-    #                              name="MIT " + str(i + 25),
-    #                              directory="ECG_BIOMETRY[256.1024]")
-    #                    for i in range(0, 44)]
-
-    filename = SNR_DIRECTORY + "/LOSS_FOR_ALL_MIT_512"
-    loss_tensor = RLTC.get_or_save_loss_tensor(filename, N_Windows, W, all_models_info, signals, force_new=False,
-                                               mean_tol=0.9, std_tol=0.5)
-
-    EERs, thresholds = RLTC.process_eers(loss_tensor, W, SNR_DIRECTORY + "/img", "MIT_EER", save_pdf=True,
+    EERs, thresholds = RLTC.process_eers(loss_tensor_, W, VALIDATION_DIRECTORY + "/img", "MIT_EER", save_pdf=True,
                                          batch_size=120, fs=250, decimals=4)
 
-    for i in [1, 20, 50]:
-        RLTC.identify_biosignals(loss_tensor, all_models_info, w_for_classification=i)
+
+
+
