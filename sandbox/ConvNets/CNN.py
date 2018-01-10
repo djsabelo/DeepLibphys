@@ -9,7 +9,7 @@ import sys
 from sklearn.metrics import accuracy_score
 
 srng = RandomStreams()
-
+THEANO_FLAGS='floatX=float64'
 SAVE_PATH = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/bento"
 
 def floatX(X):
@@ -34,7 +34,7 @@ def dropout(X, p=0.):
 
 
 def init_weights(shape):
-    return theano.shared(floatX(np.random.randn(*shape) * 0.01), borrow=True)
+    return theano.shared(np.float64(np.random.randn(*shape) * 0.01), borrow=True)#floatX
 
 
 def init_weights_x(shape):
@@ -52,7 +52,7 @@ class CNN:
         self.w2 = init_weights((128, 64, 2, 2))
         self.w3 = init_weights((256, 128, 2, 2))
         self.w4 = init_weights((4096, 500)) # 12544 60x60
-        self.w_o = init_weights((500, 20))
+        self.w_o = init_weights((500, 40))
 
         self.params = [self.w, self.w2, self.w3, self.w4, self.w_o]
         #self.updates = []
@@ -80,7 +80,7 @@ class CNN:
 
     def fit(self, trX, trY, teX, teY, batch_size=5, filename=None):
         # input image shape = (batch size, input channels, input rows, input cols)
-        X = T.ftensor4()
+        X = T.dtensor4()
         Y = T.lmatrix()
         t_start = time.time()
 

@@ -11,6 +11,9 @@ import glob
 from cv2.cv2 import resize
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import accuracy_score, confusion_matrix
+from keras.models import Sequential
+from keras.layers import Dense, ConvLSTM2D, Dropout, Activation
+from keras.models import load_model
 
 DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/Fantasia/ECG/mat'
 
@@ -41,7 +44,7 @@ def create_spectrograms(n_samples, window_size=1024, train_ratio=0.67, nperseg=1
             # print(Sxx[:15, :].shape)
             Sxx = resize(Sxx[:15, :], (30,30))
             #Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
-            Sxx = (Sxx / np.max(Sxx)).astype('d')
+            Sxx = (Sxx / np.max(Sxx))#.astype('df')
             #Sxx = np.round(Sxx, 2) * 256
             # plt.imshow(Sxx)
             # plt.axis('off')
@@ -55,7 +58,7 @@ def create_spectrograms(n_samples, window_size=1024, train_ratio=0.67, nperseg=1
 
             Sxx = resize(Sxx[:15, :], (30,30))
             # Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
-            Sxx = (Sxx / np.max(Sxx)).astype('d') # TRY * 100 & 256
+            Sxx = (Sxx / np.max(Sxx))#.astype('f') # TRY * 100 & 256
             #Sxx = np.round(Sxx, 2) * 256
             labels_test.append(filename)
             images_test.append(Sxx)
@@ -93,9 +96,9 @@ print(images_train.dtype)
 
 
 
-images_train = images_train.reshape((images_train.shape[0], 1, images_train.shape[1], images_train.shape[2]))
-images_test = images_test.reshape((images_test.shape[0], 1, images_test.shape[1], images_test.shape[2]))
-print(images_test.dtype)
+images_train = images_train.reshape((images_train.shape[0], 1, 1, images_train.shape[1], images_train.shape[2]))
+images_test = images_test.reshape((images_test.shape[0], 1, 1, images_test.shape[1], images_test.shape[2]))
+print(images_test.shape)
 # print(images_train[0,0])
 # plt.imshow(images_train[0,0], cmap=plt.cm.Reds)
 # plt.show()
@@ -104,22 +107,27 @@ print(images_test.dtype)
 # exit()
 
 # Load, Reshape and Binarize labels
-labels_train = LabelBinarizer().fit_transform(labels_train)
-labels_test = LabelBinarizer().fit_transform(labels_test)
+#labels_train = LabelBinarizer().fit_transform(labels_train)
+#labels_test = LabelBinarizer().fit_transform(labels_test)
 #print(labels_train.shape)
 
 # Train the ConvNet
-model = CNN.CNN()
+model = Sequential()
 
-model.fit(images_train, labels_train, images_test, labels_test, batch_size=20)
+model.add(ConvLSTM2D(6,kernel_size=(3,3), activation='tanh', padding='same', input_shape=(1, 1, images_train.shape[1], images_train.shape[2])))#,
+#model.add(Dropout(0.5))
+#model.add(ConvLSTM2D(1,kernel_size=(3,3), activation='linear'))
+#sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+model.compile(loss='mean_squared_error',optimizer='adam')#"categorical_crossentropy"
+model.fit(images_train[:-1], images_train[1:], batch_size=20)
+model.save('CLSTM.h5')
+#model = load_model('CLSTM.h5')
+pred = model.predict(images_test[0])
 
-results = model.predict(images_test)
-print(labels_test)
-print(results)
-print(accuracy_score(labels_test, results))
-
-plt.matshow(confusion_matrix(labels_test, results))
-plt.colorbar()
+plt.subplot(211)
+plt.imshow(images_test[0,...,30,30])
+plt.subplot(211)
+plt.imshow(pred)
 plt.show()
 # Como saber se os espetrogramas estao bem criados? Maior janela?
 # plt.imshow(results[0]) # for predicted spectrograms
