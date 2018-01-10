@@ -15,7 +15,7 @@ def prepare_data(windows, signal2model, overlap=0.11, batch_percentage=1):
                 small_window = np.round(window[s_w:s_w + window_size])
                 # print(np.max(small_window) - np.min(small_window))
                 if (np.max(small_window) - np.min(small_window)) \
-                        > 0.8*signal2model.signal_dim:
+                        > 0.7 * signal2model.signal_dim:
                     x__matrix.append(window[s_w:s_w + window_size])
                     y__matrix.append(window[s_w + 1:s_w + window_size + 1])
                 else:
@@ -54,16 +54,16 @@ if __name__ == "__main__":
 
     pos_noise_rem_signals = np.load(noise_removed_path)
     signals = np.load(fileDir + "/signals.npz")["signals"]
-    z = 0
-    z1 = 70
-    for s, signal_data in enumerate(signals[z:z1]):
-        name = 'ecg_cybhi_' + signal_data.name
+    z = -3
+    z1 = 21
+    for s, signal_data in enumerate(signals[z:]):
+        name = 'ecg_cybhi_2_' + signal_data.name
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                     batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
                                     save_interval=save_interval, tolerance=1e-9, count_to_break_max=10)
 
-        x_train, y_train = prepare_data(signal_data.processed_train_windows, signal2model, batch_percentage=0.5)
+        x_train, y_train = prepare_data(signal_data.processed_test_windows, signal2model, batch_percentage=0.5)
         model = GRU.LibphysMBGRU(signal2model)
         try:
             model.load(model.get_file_tag(-5, -5), old_signal_directory)

@@ -12,6 +12,23 @@ from DeepLibphys.utils.functions.signal2model import Signal2Model
 import scipy.io as sio
 import seaborn
 
+def load_noisy_fantasia_signals(SNRx=None):
+    clean_list = np.load("../data/processed/FANTASIA_ECG[256].npz")['x_train']
+    clean = np.zeros((1, len(clean_list), len(clean_list[0])))
+    for i, c in enumerate(clean_list):
+            clean[0, i, :] = np.array(c[-len(clean_list[0]):], dtype=np.int)
+
+    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(128, 1024)
+    dir_name = TRAINED_DATA_DIRECTORY + signal_directory
+    noise1 = np.load(dir_name + "/signals_without_noise_[{0}].npz".format(256))['processed_noise_array']
+    noise2 = np.load(dir_name + "/signals_with_noise_2_[{0}].npz".format(256))['processed_noise_array']
+    SNRs = np.load(dir_name + "/signals_without_noise_[{0}].npz".format(256))['SNRs']
+
+    if SNRx is not None:
+        noise1 = noise1[np.where(np.logical_and(SNRs >= SNRx[0], SNRs <= SNRx[1]))[0]]
+        noise2 = noise2[np.where(np.logical_and(SNRs >= SNRx[0], SNRs <= SNRx[1]))[0]]
+
+    return np.vstack((clean, np.hstack((noise1, noise2))))
 
 def make_noise_signals(full_paths, max_target_SNR=16, signal_dim=64):
     target_SNR_array = np.arange(max_target_SNR, max_target_SNR-10, -1)
@@ -81,7 +98,7 @@ if __name__ == "__main__":
         os.makedirs(dir_name)
 
     # noise_filename = dir_name + "/signals_with_noise_2_[{0}].npz".format(signal_dim)
-    noise_filename = dir_name + "/signals_without_noise_[{0}].npz".format(signal_dim)
+    # noise_filename = dir_name + "/signals_without_noise_[{0}].npz".format(signal_dim)
     # get noisy signals:
     # full_paths = get_fantasia_full_paths(db.fantasia_ecgs[0].directory, list(range(1, 41)))
     # processed_noise_array, SNRs = make_noise_signals(full_paths, max_target_SNR=12, signal_dim=signal_dim)
@@ -92,25 +109,33 @@ if __name__ == "__main__":
 
     print("Loading signals...")
     # noise_filename = "../data/ecg_noisy_signals.npz"
-    npzfile = np.load(noise_filename)
-    processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
+    processed_noise_array = load_noisy_fantasia_signals(SNRx=[6, 9])
+    # processed_noise_array, SNRs = npzfile["processed_noise_array"], npzfile["SNRs"]
 
-    snr1, snr2 = 7, 5
-    SNRs = [8]#, SNRs[5]]
+    # snr1, snr2 = 7, 5
+    # SNRs = [8]#, SNRs[5]]
+    signal2model = Signal2Model("", signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
+                                batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size)
+    model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
+
+    SNRs = ["RAW"] + [str(i) for i in range(9, 6, -1)]
     for SNR, signals_with_noise in zip(SNRs, processed_noise_array):
         for i, signal in zip(range(len(signals_with_noise)), signals_with_noise):
-            u = i+1
-            if np.logical_and(SNR == 9, u > 4) and np.logical_and(SNR == 9, u < 21):
+            running_ok = False
+            if SNR is not "RAW":
+                u = i+1
+                # if np.logical_and(SNR == 9, u > 4) and np.logical_and(SNR == 9, u < 21):
                 name = 'ecg_' + str(u) + '_SNR_' + str(SNR)
                 print(name)
                 signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                             batch_size=batch_size, mini_batch_size=mini_batch_size, window_size=window_size)
-
-                running_ok = False
+                model.model_name = name
                 while not running_ok:
-                    model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
-                    model.model_name = 'ecg_' + str(u) + '_SNR_' + str(12)
-                    model.load(model.get_file_tag(-5, -5), signal_directory)
-                    model.model_name = signal2model.model_name
-                    running_ok = model.train(signal, signal2model)
+                    # model.model_name = 'ecg_' + str(u) + '_SNR_' + str(12)
+                    try:
+                        model.load(model.get_file_tag(-5, -5), signal_directory)
+                        running_ok = True
+                    except:
+                        model = DeepLibphys.models.LibphysMBGRU.LibphysMBGRU(signal2model)
+                        running_ok = model.train(signal, signal2model)
 

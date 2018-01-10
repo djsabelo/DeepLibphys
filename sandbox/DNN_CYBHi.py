@@ -15,9 +15,10 @@ import time
 import seaborn
 from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
+import DeepLibphys.classification.RLTC as RLTC
 
 GRU_DATA_DIRECTORY = "../data/trained/"
-SNR_DIRECTORY = "../data/validation/CYBHI"
+VALIDATION_DIRECTORY = "../data/validation/CYBHI"
 
 
 def load_test_data(filetag=None, dir_name=None):
@@ -879,8 +880,8 @@ def plot_EERs(EERs, time, labels, title="", file="_iterations", savePdf=False):
     plt.title(title)
 
     if savePdf:
-        print("Saving img_2/EER{0}.pdf".format(file))
-        pdf = PdfPages("img_2/EER{0}.pdf".format(file))
+        print("Saving img/EER{0}.pdf".format(file))
+        pdf = PdfPages("img/EER{0}.pdf".format(file))
         pdf.savefig(fig)
         plt.clf()
         pdf.close()
@@ -917,7 +918,7 @@ def process_EER(loss_tensor, iterations=10, savePdf=True, SNR=1, name=""):
         plot_EERs(EERs[:, :, iteration], seconds, labels, "Mean EER for SNR of {0}".format(SNR),
                   "_SNR_{0}{1}_{2}".format(SNR, name, iteration), savePdf=savePdf)
 
-    np.savez(SNR_DIRECTORY + "/ALL_DATA_SNR_{0}{1}.npz".format(SNR, name), all_data=all_data)
+    np.savez(VALIDATION_DIRECTORY + "/ALL_DATA_SNR_{0}{1}.npz".format(SNR, name), all_data=all_data)
     labels = ["ITER {0}".format(i) for i in range(1, iterations + 1)]
     plot_EERs(np.mean(EERs, axis=0).T, seconds, labels, "Mean EER for different iterations",
               "_SNR_ITER_{0}{1}".format(SNR, name), savePdf=savePdf)
@@ -1072,10 +1073,10 @@ def process_alternate_eer(loss_tensor, iterations=10, savePdf=True, SNR=None, na
         if labels is None:
             labels = ["ECG {0}".format(i) for i in range(1, N_Signals + 1)]
         if SNR is None:
-            plot_errs(EERs[:, :, iteration], seconds, labels, SNR_DIRECTORY, "EER_{0}".format(name), "Mean EER",
+            plot_errs(EERs[:, :, iteration], seconds, labels, VALIDATION_DIRECTORY, "EER_{0}".format(name), "Mean EER",
                       savePdf=savePdf)
         else:
-            plot_errs(EERs[:, :, iteration], seconds, labels, SNR_DIRECTORY, "EER_{0}".format(name),
+            plot_errs(EERs[:, :, iteration], seconds, labels, VALIDATION_DIRECTORY, "EER_{0}".format(name),
                       "Mean EER for SNR of {0}".format(SNR), savePdf=savePdf)
             # plot_errs(accs[:-1, :, iteration], seconds, labels, "Mean ACC for SNR of {0}".format(SNR),
             #           "_ACC_SNR_{0}_{1} and Threshold of {2}".format(SNR, name, iteration, accs[-1, 0, iteration]), savePdf=savePdf)
@@ -1111,7 +1112,7 @@ def process_eer(loss_tensor, iterations=10, savePdf=True, SNR=1, name=""):
 
         labels = ["ECG {0}".format(i) for i in range(1, N_Signals + 1)]
 
-        plot_errs(EERs.T, seconds, labels, SNR_DIRECTORY, "EER_SNR_{0}{1}_{2}".format(SNR, name, iteration),
+        plot_errs(EERs.T, seconds, labels, VALIDATION_DIRECTORY, "EER_SNR_{0}{1}_{2}".format(SNR, name, iteration),
                 "Mean EER for SNR of {0}".format(SNR), savePdf=savePdf)
 
     np.savez("../data/validation/ALL_DATA_SNR_{0}_{1}.npz".format(SNR, name), all_data=all_data)
@@ -1132,13 +1133,14 @@ def process_all_eers(loss_quaternion, SNRs, iterations=1, loss_iteration=0, batc
                                      savePdf=False, SNR=SNR, name=str(loss_iteration), batch_size=batch_size)
         mean_EERs.append(EERs)
 
-    np.savez(SNR_DIRECTORY + "/eers.npz", EERs=mean_EERs)
+    np.savez(VALIDATION_DIRECTORY + "/eers.npz", EERs=mean_EERs)
 
     return mean_EERs
 
 
-def load_tests_cybhi():
-    processed_data_path = '../data/biometry_cybhi[256].npz'
+def load_tests_cybhi(long=True):
+    if long:
+        processed_data_path = '../data/biometry_cybhi[256].npz'
 
     file = np.load(processed_data_path)
     train_dates, train_names, test_dates, test_names, test_signals = \
@@ -1202,7 +1204,7 @@ if __name__ == "__main__":
     batch_size = 128
     fs = 250
     window_size = 512
-    W = 512
+    W = 256
     save_interval = 1000
     iterations = 1
     bs = 60
@@ -1210,70 +1212,96 @@ if __name__ == "__main__":
     seconds = (W / fs) + (np.arange(1, bs) * W * 0.11) / fs
     loss_tensor = []
     mean_EERs = []
-    limit = 50
+    limit = 0
     # prefix = "_LONG_{0}".format(limit)
     prefix = "_LONG_{0}".format(limit)
 
     signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
     fileDir = "Data/CYBHi"
     signals = np.load(fileDir + "/signals.npz")["signals"]
-    signals = signals[list(range(12))+list(range(13,len(signals)))]
+    signals = signals[list(range(12))+list(range(13, len(signals)))]
     size = np.zeros(len(signals))
     all_models_info = []
     test_signals = []
 
+    pre = "[NO FILTER]"
+    loss_name = "M1_vs_M2"
+
+    prefix_name = 'ecg_cybhi_'
+    if loss_name[:2] == "M2":
+        name = 'ecg_cybhi_2_'
+
+    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
+    print(full_path)
+    test_windows_xs = []
+    test_windows_ys = []
     for s, signal_data in enumerate(signals):
-        name = 'ecg_cybhi_' + signal_data.name
-        all_models_info.append(ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
-                                         DS=-5, t=-5, W=window_size, name="CYBHi {0}".format(s)))
-        signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
-                                    batch_size=batch_size,
-                                    mini_batch_size=mini_batch_size, window_size=window_size,
-                                    save_interval=save_interval, tolerance=1e-6)
-        try:
-            prefix.index("_LONG_")
-            x_train, y_train = prepare_test_data(signal_data.processed_test_windows, signal2model, batch_percentage=0,
-                                                 mean_tol=0.1)
-        except:
-            x_train, y_train = prepare_test_data(signal_data.processed_train_windows, signal2model,
-                                                 batch_percentage=0.5, mean_tol=0.1)
+        name = prefix_name + signal_data.name
+        if loss_name[-2:] == "M2":
+            test_signals.append(signal_data.processed_test_windows)
+        else:
+            test_signals.append(signal_data.processed_train_windows)
 
-        size[s] = np.size(x_train, axis=0)
-        test_signals.append(x_train)
+        model_info = ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
+                               DS=-5, t=-5, W=W, name="CYBHi {0}".format(s))
 
-    good_indices = np.where(size > limit)[0]
+        all_models_info.append(model_info)
+        all_indexes, test_windows_x, test_windows_y, _, _ = get_clean_indexes(test_signals[-1],
+                                                                              model_info.to_signal2model(),
+                                                                              overlap=0.11,
+                                                                              max_tol=0.7)
+        if loss_name[-2:] == loss_name[:2]:
+            test_windows_xs.append(test_windows_x[int(len(test_windows_x) * 0.5):])
+            test_windows_ys.append(test_windows_y[int(len(test_windows_x) * 0.5):])
+        else:
+            test_windows_xs.append(test_windows_x)
+            test_windows_ys.append(test_windows_y)
 
-    test_signals = [test_signals[i] for i in good_indices]
-    all_models_info = [all_models_info[i] for i in good_indices]
-    n_windows = int(np.min(size[good_indices]))
-
-    for t, test_signal in enumerate(test_signals):
-        test_signals[t] = test_signal[:n_windows]
-
-    print("REJECTED: {0} of {1}".format(len(size) - len(test_signals), len(size)))
-    print("MAX OF WINDOWS: {0}".format(int(np.min(size[good_indices]))))
-    test_signals = np.array(test_signals)
-
-    filename = SNR_DIRECTORY + "/LOSS_CYBHi{1}[64.{0}]".format(window_size, prefix)
-    # loss_tensor = calculate_loss_tensor(filename, n_windows, W, all_models_info, test_signals)
-    print(filename + " processed")
+    loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=all_models_info,
+                                               test_signals=test_signals,
+                                               X_matrix=test_windows_xs, Y_matrix=test_windows_ys, force_new=True,
+                                               mean_tol=0,
+                                               overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=1000000)
 
 
-    if len(loss_tensor) < 1:
-        loss_tensor = np.load(filename + ".npz")["loss_tensor"]
+    for i in [1, 10, 30, 60]:
+        RLTC.identify_biosignals(loss_tensor, all_models_info, batch_size=i)
 
-    print("Windows: {0}".format(np.shape(loss_tensor)[2]))
-    x = np.arange(np.shape(loss_tensor)[0]).tolist()
-    # z = 29
-    # x = np.arange(z).tolist() + np.arange(z+1, np.shape(loss_tensor)[0]).tolist()
-    for i in range(np.shape(loss_tensor)[0]):
-        for j in range(np.shape(loss_tensor)[1]):
-            for k in range(np.shape(loss_tensor)[2]):
-                loss_tensor[i, j, k] = loss_tensor[i, j, k] - np.min(loss_tensor[i, :, :])
-                loss_tensor[i, j, k] = loss_tensor[i, j, k] / np.max(loss_tensor[i, :, :])
-    for i in [15, 40, 58]:
-        classify_biosignals(filename, N_Windows=None, models_index=x, signals_index=x, w_for_classification=i, title="")
+    EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
+                                         batch_size=60, decimals=5)
+    # good_indices = np.where(size > limit)[0]
 
-    labels = [model.name for model in all_models_info]
-    EERs, thresholds = process_alternate_eer(loss_tensor[x][:, x], iterations=iterations,
-                                 savePdf=True, name="cybhi{0}".format(prefix), batch_size=bs, labels=labels)
+    # test_signals = [test_signals[i] for i in good_indices]
+    # all_models_info = [all_models_info[i] for i in good_indices]
+    # n_windows = int(np.min(size[good_indices]))
+
+    # for t, test_signal in enumerate(test_signals):
+    #     test_signals[t] = test_signal[:n_windows]
+    #
+    # print("REJECTED: {0} of {1}".format(len(size) - len(test_signals), len(size)))
+    # print("MAX OF WINDOWS: {0}".format(int(np.min(size[good_indices]))))
+    # test_signals = np.array(test_signals)
+    #
+    #
+    # # loss_tensor = calculate_loss_tensor(filename, n_windows, W, all_models_info, test_signals)
+    # print(filename + " processed")
+    #
+    #
+    # if len(loss_tensor) < 1:
+    #     loss_tensor = np.load(filename + ".npz")["loss_tensor"]
+
+    # print("Windows: {0}".format(np.shape(loss_tensor)[2]))
+    # x = np.arange(np.shape(loss_tensor)[0]).tolist()
+    # # z = 29
+    # # x = np.arange(z).tolist() + np.arange(z+1, np.shape(loss_tensor)[0]).tolist()
+    # # for i in range(np.shape(loss_tensor)[0]):
+    # #     for j in range(np.shape(loss_tensor)[1]):
+    # #         for k in range(np.shape(loss_tensor)[2]):
+    # #             loss_tensor[i, j, k] = loss_tensor[i, j, k] - np.min(loss_tensor[i, :, :])
+    # #             loss_tensor[i, j, k] = loss_tensor[i, j, k] / np.max(loss_tensor[i, :, :])
+    # for i in [15, 40, 58]:
+    #     classify_biosignals(filename, N_Windows=None, w_for_classification=i, title="")
+    #
+    # labels = [model.name for model in all_models_info]
+    # EERs, thresholds = process_alternate_eer(loss_tensor, iterations=iterations,
+    #                              savePdf=True, name="cybhi{0}".format(prefix), batch_size=bs, labels=labels)

@@ -166,16 +166,16 @@ class LibphysSGDGRU(LibphysGRU):
         [output] = self.predict(signal)
         next_sample_probs = np.asarray(output, dtype=float)
         next_sample_probs = next_sample_probs[-1] / np.sum(next_sample_probs[-1])
-
-        means = np.where(next_sample_probs > 0.01)[0]
-        xxx = np.zeros(64)
-        for mean_ in means:
-            xxx += norm.pdf(np.arange(64), mean_, uncertaintly) * next_sample_probs[mean_]
-
-        xxx = xxx / np.sum(xxx)
+        xxx = next_sample_probs
+        # means = np.where(next_sample_probs > 0.01)[0]
+        # xxx = np.zeros(self.signal_dim)
+        # for mean_ in means:
+        #     xxx += norm.pdf(np.arange(self.signal_dim), mean_, uncertaintly) * next_sample_probs[mean_]
+        #
+        # xxx = xxx / np.sum(xxx)
 
             # next_sample_probs = np.random.multinomial(1, next_sample_probs)
-        next_sample = np.random.choice(64, p=xxx)
+        next_sample = np.random.choice(self.signal_dim, p=xxx)
             # next_sample = np.argmax(sample)
         # except:
         #     print("exception: " + np.sum(np.asarray(next_sample_probs[-1]), dtype=float))
@@ -185,3 +185,24 @@ class LibphysSGDGRU(LibphysGRU):
         # print(next_sample)
         # plt.show()
         return next_sample, xxx
+
+    def online_sinthesizer(self, N, starting_signal, window_seen_by_GRU_size, uncertaintly):
+        new_signal = starting_signal
+        plt.ion()
+        plt.plot(starting_signal)
+        plt.pause(0.01)
+        print('Starting model generation')
+        percent = 0
+        for i in range(N):
+            if int(i*100/N)% 5 == 0:
+                print('.', end='')
+            elif int(i*100/N)% 20 == 0:
+                percent += 0.2
+                print('{0}%'.format(percent))
+            x, p = self.generate_online_predicted_signal(starting_signal, window_seen_by_GRU_size, uncertaintly)
+            new_signal.append(x)
+            plt.clf()
+            plt.plot(new_signal)
+            plt.pause(0.01)
+
+        return new_signal[1:]

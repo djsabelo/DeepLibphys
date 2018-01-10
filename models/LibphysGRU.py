@@ -388,7 +388,7 @@ class LibphysGRU:
         if file_tag is None:
             file_tag = self.get_file_tag(-5, -5)
 
-        self.train_time = int((time.time() - self.start_time) * 1000)
+        self.train_time = int((time.time() - self.start_time))
 
         if dir_name is None:
             dir_name = self.get_directory_tag(self.model_name.upper(), 0, 0)

@@ -1,43 +1,64 @@
-class ModelInfo:
-    Sd, Hd, dataset_name, directory, name, DS, t, W = 0, 0, "", "", "", -5, -5, 256
+import numpy as np
+from DeepLibphys.utils.functions.signal2model import *
 
-    def __init__(self, Sd=64, Hd=256, dataset_name="", directory="", DS=-5, t=-5, W=256, name="model"):
-        """
-        :param Sd: signal_dimension
-        :param Hd: hidden_dimension
-        :param dataset_name: signal_name - name in which the model was saved
-        :param directory: where the model was saved
-        :param DS: recorded dataset #
-        :param t:  recorded epoch # for corresponding dataset
-        :param W: default window size
-        :param name: model name to be displayed
-        """
+def get_cybhi_database_info(n=1):
+    signal_dim = 256
+    hidden_dim = 256
+    window_size = 512
+    W = 512
 
-        self.Sd = Sd
-        self.Hd = Hd
-        self.dataset_name = dataset_name
-        self.directory = directory
-        self.name = name
-        self.Sd = Sd
-        self.t = t
-        self.W = W
-        self.DS = DS
+    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
+    signals = np.load("../data/processed/CYBHi/cybhi_signals.npz")["signals"]
+    signals = signals[list(range(12))+list(range(13, len(signals)))]
+    all_models_info = []
+
+    for s, signal_data in enumerate(signals):
+        if n == 1:
+            name = 'ecg_cybhi_' + signal_data.name
+        elif n == 2:
+            name = 'ecg_cybhi_2_' + signal_data.name
+        else:
+            return []
+
+        all_models_info.append(ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
+                                         DS=-5, t=-5, W=W, name="CYBHi {0}".format(s)))
+
+    return all_models_info
 
 
-class SignalInfo:
-    type, directory, index, size, name, file_name = "", "", 0, 0, "", ""
+def get_mit_variables(param):
+    RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
+    if param == "arr":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Arrythmia', '../data/processed/biometry_mit[256].npz', 'ecg_mit_arrythmia_'
+    if param == "sinus":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Sinus', '../data/processed/biometry_mit_sinus[256].npz', 'ecg_mit_sinus_'
+    if param == "long":
+        return RAW_SIGNAL_DIRECTORY + 'MIT-Long-Term', '../data/processed/biometry_mit_long_term[256].npz', \
+                'ecg_mit_long_term_'
 
-    def __init__(self, type, directory, index, size, name, file_name=""):
-        self.type = type
-        self.directory = directory
-        self.index = index
-        self.size = size
-        self.name = name
-        self.file_name = file_name
+    return None
 
-#TODO: Make SignalType Default in all functions
-class SignalType:
-    EEG, ECG, EMG, GSR, RESP, ACC, BIOMETRIC_ACC, OTHER = range(8)
+
+def get_mit_database_info():
+    batch_size = 256
+    window_size = 512
+    loss_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+
+    all_models_info = []
+    s_i = 1
+    for s_index, db_name in enumerate(["arr", "sinus", "long"]):
+        mit_dir, processed_data_path, core_name = get_mit_variables(db_name)
+        signals_aux = np.load(processed_data_path)['signals']
+        all_models_info += [ModelInfo(Hd=256, Sd=256, dataset_name=core_name + str(i),
+                                      name="MIT " + str(s_i + (i)),
+                                      directory=loss_directory)
+                            for i in range(0, np.shape(signals_aux)[0])]
+        s_i += np.shape(signals_aux)[0]
+
+        return all_models_info
+
+
+
 
 signal_models = [ModelInfo(64, 256, "eeg_all", "EEG_Attention[1000.256]",
                            -5, -5, 256, "EEG"),
@@ -228,7 +249,7 @@ ecg_1024_clean_models = [ModelInfo(Hd=256, dataset_name="clean_ecg"+str(i+1),
 
 ecg_1024_256_RAW = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i),
                               name="ECG "+str(i),
-                              directory="ECG_BIOMETRY[256.1024]")
+                              directory="BIOMETRY[256.1024]")
                     for i in range(1, 41)]
 
 ecg_1024_256_SNR_12 = [ModelInfo(Hd=256, Sd=256, W=1024, dataset_name="ecg_"+str(i+1)+"_SNR_12",
@@ -312,6 +333,8 @@ mit_256 = [ModelInfo(Hd=256, Sd=256, dataset_name="ecg_mit_"+str(i),
                         directory="ECG_BIOMETRY[128.1024]")
               for i in range(0, 45)]
 
+mit_1024 = get_mit_database_info()
+
 cybhi_256 = [ModelInfo(Hd=256, dataset_name="ecg_cybhi_"+str(i),
                         name="CYBHi "+str(i+1),
                         directory="ECG_BIOMETRY[112.256]")
@@ -321,6 +344,10 @@ cybhi_1024 = [ModelInfo(Sd=256, Hd=256, dataset_name="ecg_cybhi_"+str(i),
                         name="CYBHi "+str(i+1),
                         directory="ECG_BIOMETRY[112.1024]")
               for i in range(0, 15)]
+
+cybhi_512_M1 = get_cybhi_database_info()
+
+cybhi_512_M2 = get_cybhi_database_info(2)
 
 web_group_x_models = [ModelInfo(Hd=256, dataset_name=("web_group_x["+str(i)+"]"),
                         name="WEB GROUP X "+str(i),

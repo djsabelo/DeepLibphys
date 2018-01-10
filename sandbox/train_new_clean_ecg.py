@@ -77,34 +77,81 @@ def train_fantasia(hidden_dim, mini_batch_size, batch_size, window_size, signal_
 
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim, batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
-                                    save_interval=save_interval, lower_error=3e-2, lower_learning_rate=1e-4, count_to_break_max=5)
+                                    save_interval=save_interval, lower_error=3e-5, lower_learning_rate=1e-4, count_to_break_max=30)
         print("Compiling Model {0}".format(name))
 
+        last_index = int(len(signal)*0.33)
+        x_train, y_train = prepare_test_data([signal[22500:last_index]], signal2model, mean_tol=0.9, std_tol=0.5)
+
+
+        # fig, ax = plt.subplots()
+        # plt.subplots_adjust(bottom=0.2)
+        # l, = plt.plot(x_train[0], lw=2)
+        #
+        # class BooleanSwitcher(object):
+        #     indexes = []
+        #     ind = 0
+        #
+        #     def yes(self, event):
+        #         if self.ind < len(x_train):
+        #             self.indexes.append(self.ind)
+        #             self.ind += 1
+        #         if self.ind < len(x_train):
+        #             l.set_ydata(x_train[self.ind])
+        #             plt.draw()
+        #         else:
+        #             self.crop()
+        #             plt.close()
+        #
+        #     def no(self, event):
+        #         self.ind += 1
+        #         if self.ind < len(x_train):
+        #             l.set_ydata(x_train[self.ind])
+        #             plt.draw()
+        #         else:
+        #             self.crop()
+        #             plt.close()
+        #
+        #     def crop(self):
+        #         c = len(self.indexes) % 16
+        #         self.indexes = self.indexes[:(len(self.indexes) - c)]
+        # callback = BooleanSwitcher()
+        # axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+        # axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+        # by = Button(axnext, 'Yes')
+        # by.on_clicked(callback.yes)
+        # bn = Button(axprev, 'No')
+        # bn.on_clicked(callback.no)
+        # plt.show()
+
+
         model = GRU.LibphysMBGRU(signal2model)
-        try:
-
-            if i < 20:
-                old_directory = "CLEAN_ECG_BIOMETRY[128.1024]"
-                old_name = 'clean_ecg' + str(i+1)
-            else:
-                old_directory = "ECG_BIOMETRY[128.1024]"
-                old_name = name
-
-            old_tag= 'GRU_{0}[{1}.{2}.{3}.{4}.{5}]'. \
-                format(old_name, signal_dim, hidden_dim, -1, -5, -5)
-            model.load(old_tag, old_directory)
-        except:
-            pass
+        # try:
+        #
+        #     # if i < 20:
+        #     #     old_directory = "CLEAN_ECG_BIOMETRY[128.1024]"
+        #     #     old_name = 'clean_ecg' + str(i+1)
+        #     # else:
+        #     old_directory = "BIOMETRY[256.1024]"
+        #     old_name = name
+        #
+        #     old_tag= 'GRU_{0}[{1}.{2}.{3}.{4}.{5}]'. \
+        #         format(old_name, signal_dim, hidden_dim, -1, -5, -5)
+        #     model.load(old_tag, old_directory)
+        # except:
+        #     pass
 
         print("Initiating training... ")
-        last_index = int(len(signal)*0.33)
         model.model_name = 'ecg_' + str(i+1)
-        x_train, y_train = prepare_test_data([signal[:last_index]], signal2model, mean_tol=0.9, std_tol=0.1)
+
 
         model.start_time = time.time()
+        # returned = model.train_model(x_train[callback.indexes], y_train[callback.indexes], signal2model)
+        model.load(model.get_file_tag(), signal_directory)
         returned = model.train_model(x_train, y_train, signal2model)
         if returned:
             model.save(signal2model.signal_directory, model.get_file_tag(-5, -5))
+
 
 
 model_info = db.ecg_1024_256_RAW[0]
@@ -120,18 +167,30 @@ indexes = np.arange(1, 41)
 
 print("Loading signals...")
 # signals = np.load("../data/signals_without_noise.npz")['signals_without_noise'][indexes]
-# x_train, y_train = get_fantasia_dataset(signal_dim, indexes, db.fantasia_ecgs[0].directory, peak_into_data=False)
+# x_train, y_train = get_fantasia_dataset(signal_dim,  indexes, db.fantasia_ecgs[0].directory, peak_into_data=False)
+
 # np.savez("../data/processed/FANTASIA_ECG[256].npz", x_train=x_train, y_train=y_train)
 x_train, y_train = np.load("../data/processed/FANTASIA_ECG[256].npz")['x_train'], \
                    np.load("../data/processed/FANTASIA_ECG[256].npz")['y_train']
+# np.savez("../data/processed/backup_FANTASIA_ECG[256].npz", x_train=x_train_1, y_train=y_train_1)
+# x_train_1[14] = x_train[14]
+# y_train_1[14] = y_train[14]
+# np.savez("../data/processed/FANTASIA_ECG[256].npz", x_train=x_train_1, y_train=y_train_1)
+# for i, x in zip(x_train, x_train_1):
+#     plt.figure()
+#     plt.plot(i)
+#     plt.plot(x)
+# plt.show()
 # for x in x_train:
 #     plt.plot(x)
 #     plt.show()
 # print(xxasxa)
-indexes = np.array([8, 9])
-indexes = np.array([18, 19, 26])
+# indexes = np.array([8, 9])
+# indexes = np.array([18, 19, 26])
 # indexes = np.array([27, 28])
-# indexes = np.array([29, 37])
+indexes = np.array([32])
+# plt.plot(x_train[14])
+# plt.show()
 # indexes = np.array([38, 39])
 
 # indexes = np.arange(20, 30)
