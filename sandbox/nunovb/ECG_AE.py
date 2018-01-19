@@ -59,6 +59,13 @@ for i, val in enumerate(peaks):
         #x[i] = sig[i-512:i+512]
         x.append(sig[val-512:val+512])
 x = np.array(x).astype('f')
+#print(x)
+# plt.title("Original Signal")
+# plt.ylabel('Normalized Voltage')
+# plt.xlabel('Samples')
+# plt.plot(x[0])
+# plt.show()
+# exit()
 #x = segment_matrix(sig, 1024)[0].astype(np.float32)
 # plt.ion()
 print("X shape:", x.shape)
@@ -70,69 +77,46 @@ print("X shape:", x.shape)
 #     #plt.clf()
 # exit()
 
-costs = []
-weights = []
-for i in range(10):
-    #with tf.device('/device:GPU:1'):
-    model = Autoencoder()
-    model.fit(x[:4400], n_epochs=25, learning_rate=0.001, batch_size=256, load=False, save=False, name='1/AE_2n')
+#with tf.device('/device:GPU:0'):
+model = Autoencoder()
+model.fit(x[:4400], n_epochs=1, learning_rate=0.001, batch_size=256, load=False, save=False, name='1/AE')
 
-    #pred = model.reconstruct(x[4420])[0]
+pred = model.reconstruct(x[4420])
+print(pred.shape)
     #np.save('/home/bento/pred.npy', pred)
     #pred = np.load('/home/bento/pred.npy')
-    #Epoch: 0004 cost=0.062285646
-    #Epoch: 0040 cost=0.040729610
-    #Epoch: 00100 cost=0.028864579
-    #Epoch: 00150 cost=0.022453480
-    #Epoch: 00200 cost=0.018277871
-    #Epoch: 00250 cost=0.014995341
-    #Epoch: 00300 cost=0.012502045
-    #Epoch: 00350 cost=0.011167485
-    #Epoch: 00400 cost=0.010011343
-    #Epoch: 00500 cost=0.008365645
-    #Epoch: 00600 cost=0.007384177
-    #Epoch: 00800 cost=0.006704605
-    #Epoch: 01000 cost=0.005432931
-    # plt.figure()
-    #plt.subplot(211)
-    # plt.title("Original")
-    # plt.ylabel('Normalized Voltage')
-    # plt.xlabel('Samples')
-    # plt.plot(x[4420])
-    #plt.subplot(212)
-    # plt.title("Reconstructed after 5 epochs")
-    # plt.ylabel('Normalized Voltage')
-    # plt.xlabel('Samples')
-    # plt.plot(pred)#.flatten())
-    # plt.show()
-    # exit()
+
 
     #lr = model.get_adapt_lr()
     #np.save('/home/bento/lr.npy', lr)
     #lr = np.load('/home/bento/lr.npy')
     #lr = (np.max(lr) - lr)/(np.max(lr) - np.min(lr))
-    #print(model.get_weights())# self.weights['h2']
-    costs.append(model.get_cost_vector()[:])
-    weights.append(model.get_weights()[:])
 
-costs = np.array(costs).reshape(-1,1)
-weights = np.array(weights).reshape(2,-1)
-print(costs.shape)
-print(weights.shape)
-np.save('/home/bento/costs3_10.npy', costs)
-np.save('/home/bento/weights3_10.npy', weights)
+# plt.subplot(211)
+# plt.title("Test Signal")
+# plt.ylabel('Normalized Voltage')
+# plt.xlabel('Samples')
+# plt.plot(pred)
+# plt.subplot(212)
+# plt.title("Predicted Signal")
+# plt.ylabel('Learning Rate')
+# plt.xlabel('Epoch')
+# plt.plot(x[4420])
+# plt.show()
+#np.save('/home/bento/costs3_10.npy', costs)
+#np.save('/home/bento/weights3_10.npy', weights)
 
-costs = np.load('/home/bento/costs3_10.npy').flatten()
+#costs = np.load('/home/bento/costs3_10.npy').flatten()
 #costs = (np.max(costs) - costs)/(np.max(costs) - np.min(costs))
 #averages = np.array([np.mean(costs[i-10:i+10]) for i in range(10, len(costs)-10)])
 
-weights = np.load('/home/bento/weights3_10.npy')
+#weights = np.load('/home/bento/weights3_10.npy')
 # print(weights[0].reshape(-1,10)[0])
 # print(weights[1].reshape(-1,10)[0])
 # print(weights[0].reshape(-1,10)[1])
 # print(weights[1].reshape(-1,10)[1])
 # exit()
-#costs = costs.reshape(-1,10)
+'''costs = np.array([costs for i in range(10)]).reshape(10,10)
 X = weights[0]#.reshape(-1,10)
 Y = weights[1]#.reshape(-1,10)
 print(costs.shape)
@@ -150,17 +134,5 @@ ax.set_zlabel('Cost')
 ax.set_ylabel('X2')
 ax.set_xlabel('X1')
 #colors = np.random.rand_int()#cm.rainbow(np.linspace(0, 1, signals.shape[1]))
-ax.plot_surface(X, Y, loss_surface, color=np.random.rand(3))#cm.coolwarm.reversed()
-plt.show()
-'''plt.figure()
-plt.subplot(211)
-plt.title("Adaptive Learning Rate")
-plt.ylabel('log Cost')
-plt.xlabel('Epoch')
-plt.plot(costs, color="#32CD32", alpha=0.8)
-plt.plot(np.arange(10,len(costs)-10),averages, color="#8B0000", alpha=0.6)
-plt.subplot(212)
-plt.ylabel('Learning Rate')
-plt.xlabel('Epoch')
-plt.plot(lr, color="#6A5ACD", alpha=0.8)
+ax.plot_surface(X, Y, costs, color=np.random.rand(3))#cm.coolwarm.reversed()
 plt.show()'''

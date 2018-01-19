@@ -71,15 +71,18 @@ class Autoencoder:
                 avg_cost += c / total_batch
 
             # Update cost vector
-            self.costs.append(avg_cost)
-            self.weight_vec.append(self.sess.run(tf.reduce_mean(self.weights['h2'], axis=0)))
-            lr = tf.cond(tf.logical_and(tf.less(10, len(self.costs)),
-                                        tf.less(tf.reduce_mean(self.costs[-11:-6]),
-                                                tf.reduce_mean(self.costs[-6:-1]))),
-                         lambda: tf.multiply(lr, decay), lambda: lr)
-            learning_rate = self.sess.run(lr)
-            print("lr:", learning_rate)
-            self.lr_vector.append(learning_rate)
+            # self.costs.append(avg_cost)
+            # self.weight_vec.append(self.sess.run(tf.reduce_mean(self.weights['h2'], axis=0)))
+
+            # Get learning rate
+            # lr = tf.cond(tf.logical_and(tf.less(10, len(self.costs)),
+            #                             tf.less(tf.reduce_mean(self.costs[-11:-6]),
+            #                                     tf.reduce_mean(self.costs[-6:-1]))),
+            #              lambda: tf.multiply(lr, decay), lambda: lr)
+            # learning_rate = self.sess.run(lr)
+            # print("lr:", learning_rate)
+            # self.lr_vector.append(learning_rate)
+
             # Display logs per epoch step
             if epoch % display_step == 0:
                 print("Epoch:", '%04d' % (epoch + 1), "cost={:.9f}".format(avg_cost))
@@ -96,15 +99,19 @@ class Autoencoder:
     def reconstruct(self, x_t):
         # Reconstructs the input signal
         X = tf.placeholder("float", x_t.shape)
+        self.layer_1 = tf.nn.sigmoid(tf.add(tf.matmul(x_t, self.weights['h1']), self.biases['b1']))
+        self.layer_2 = tf.nn.sigmoid(tf.add(tf.matmul(self.layer_1, self.weights['h2']), self.biases['b2']))
+        self.layer_3 = tf.nn.sigmoid(tf.add(tf.matmul(self.layer_2, tf.transpose(self.weights['h2'])), self.biases['b3']))
+        self.layer_4 = tf.matmul(self.layer_3, tf.transpose(self.weights['h1']))
         return self.sess.run(self.layer_4, feed_dict={X: x_t})
         
     def get_latent(self, x_t):
         # Returns the latent representation of the input signal
         X = tf.placeholder("float", x_t.shape)
+
         return self.sess.run(self.layer_2, feed_dict={X: x_t})
 
     def get_weights(self):
         # Returns the latent representation of the input signal
         #X = tf.placeholder("float", x_t.shape)
         return self.weight_vec#, feed_dict={X: x_t})
-    
