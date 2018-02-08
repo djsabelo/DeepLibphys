@@ -17,7 +17,7 @@ import seaborn
 from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
 
-VALIDATION_DIRECTORY = "../data/validation/Dec_MIT"
+VALIDATION_DIRECTORY = "../data/validation/MIT"
 
 
 def get_variables(param):
@@ -31,6 +31,28 @@ def get_variables(param):
 
     return None
 
+def get_processing_variables():
+    a_dir, apdp, core_name0 = get_variables('arr')
+    s_dir, spdp, core_name1 = get_variables('sinus')
+    l_dir, lpdp, core_name2 = get_variables('long')
+
+    # full_paths = os.listdir(mit_dir)
+    filenames = [a_dir + "/" + full_path for full_path in os.listdir(a_dir) if full_path.endswith(".mat")] + \
+                [s_dir + "/" + full_path for full_path in os.listdir(s_dir) if full_path.endswith(".mat")] + \
+                [l_dir + "/" + full_path for full_path in os.listdir(l_dir) if full_path.endswith(".mat")]
+
+    Ns = [len(np.load(apdp)["signals"]), len(np.load(spdp)["signals"].tolist()), len(np.load(lpdp)["signals"].tolist())]
+
+    core_names = []
+    for x, n in enumerate(Ns):
+        for i in range(n):
+            core_names.append(eval("core_name{0}".format(x)) + str(i))
+
+    # print(Ns)
+    processed_filenames = np.array(['../data/processed/MIT/{0}[256].npz'.format(core_name) for core_name in core_names])
+
+    return filenames, Ns, np.array(core_names), processed_filenames
+
 
 if __name__ == "__main__":
     N_Windows = None
@@ -42,30 +64,25 @@ if __name__ == "__main__":
     window_size = 512
     save_interval = 1000
     fs = 250
-    loss_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    model_directory = 'ECG_BIOMETRY[{0}]'.format("MIT")
+    raw_filenames, Ns, core_names, processed_filenames = get_processing_variables()
 
-    signals = []
-    all_models_info = []
-    s_i = 1
-    for s_index, db_name in enumerate(["arr", "sinus", "long"]):
-        mit_dir, processed_data_path, core_name = get_variables(db_name)
-        signals_aux = np.load(processed_data_path)['signals']
-        signals += extract_test_part(signals_aux)
-        all_models_info += [ModelInfo(Hd=256, Sd=256, dataset_name=core_name+str(i),
-                                      name="MIT " + str(s_i + (i)),
-                                      directory=loss_directory)
-                            for i in range(0, np.shape(signals_aux)[0])]
-        s_i += np.shape(signals_aux)[0]
+    all_models_info, signals = [], []
+    for i, filename in enumerate(processed_filenames):
+        signal, core_name = np.load(filename)["signal"], np.load(filename)["core_name"]
+        signals.append(extract_test_part([signal])[0])
+        all_models_info.append(ModelInfo(Hd=256, Sd=256, dataset_name=core_name,
+                                     name="MIT " + str(1 + i),
+                                     directory=model_directory))
 
     filename = VALIDATION_DIRECTORY + "/MIT_LOSS[{0}].npz".format(W)
-    loss_tensor = RLTC.get_or_save_loss_tensor(filename, N_Windows, W, all_models_info, signals, force_new=True,
-                                               mean_tol=0.5, std_tol=2)
+    loss_tensor = RLTC.get_or_save_loss_tensor(filename, N_Windows, W, all_models_info, signals, force_new=False)
 
     # X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
     #                                    batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
     #                                    randomize=False)
-    loss_tensor, all_models_info = RLTC.filter_loss_tensor(signals, loss_tensor, all_models_info, W,
-                                                             min_windows=256, max_tol=0.9, std_tol=0.5)
+    # loss_tensor, all_models_info = RLTC.filter_loss_tensor(signals, loss_tensor, all_models_info, W,
+    #                                                          min_windows=256, max_tol=0.9, std_tol=0.5)
     loss_tensor_ = np.copy(loss_tensor)
     # mask = mask_without_indexes(loss_tensor, [2, 30, 39, 40, 49, 51, 57, 63])
     # loss_tensor = loss_tensor[mask][:, mask]

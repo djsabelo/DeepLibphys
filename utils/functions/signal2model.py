@@ -109,7 +109,7 @@ class Signal(object):
 
     def __init__(self, train_signal, test_signal, train_windows, test_windows, user_name):
         self.train_signal, self.test_signal, self.train_windows, self.test_windows, self.name = \
-            train_signal, test_signal, test_signal, train_windows, user_name
+            train_signal, test_signal, train_windows, test_windows, user_name
 
 
 class TimeWindow(object):

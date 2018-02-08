@@ -1197,11 +1197,33 @@ def load_train_cybhi():
 #     print("Windows of {0}: {1}; Rejected: {2} of {3}".format(np.shape(indexes)[0], batch_size, reject, total))
 #     return x__matrix[indexes], y__matrix[indexes]
 
+def prepare_cybhi_train_test_variables(loss_name, trained_model_directory):
+    noise_removed_path = "Data/CYBHi/signals_long_v2.npz"
+    signals = np.load(noise_removed_path)["signals"]
+    prefix_name = 'ecg_cybhi_{0}_'.format(loss_name[:2])
+    names = np.array([signal.name for signal in signals])
+
+    if loss_name[-2:] == "M1":
+        test_windows = [signal.test_windows for signal in signals]
+    else:
+        test_windows = [signal.train_windows for signal in signals]
+
+    if loss_name[-2:] == loss_name[:2]:
+        signals = np.array(extract_train_part(test_windows, 0.5))
+    else:
+        signals = np.array(test_windows)
+
+    all_models_info = [ModelInfo(Sd=256, Hd=256, dataset_name=prefix_name + str(s), directory=trained_model_directory,
+                           DS=-5, t=-5, W=W, name="CYBHi {0}".format(s+1)) for s, name in enumerate(names)]
+
+    return signals, all_models_info
+
+
 if __name__ == "__main__":
     signal_dim = 256
     hidden_dim = 256
     mini_batch_size = 16
-    batch_size = 128
+    batch_size = 32
     fs = 250
     window_size = 512
     W = 256
@@ -1213,55 +1235,29 @@ if __name__ == "__main__":
     loss_tensor = []
     mean_EERs = []
     limit = 0
+    min_windows = 250
     # prefix = "_LONG_{0}".format(limit)
     prefix = "_LONG_{0}".format(limit)
 
-    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
-    fileDir = "Data/CYBHi"
-    signals = np.load(fileDir + "/signals.npz")["signals"]
-    signals = signals[list(range(12))+list(range(13, len(signals)))]
-    size = np.zeros(len(signals))
+    trained_model_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+
     all_models_info = []
     test_signals = []
 
-    pre = "[NO FILTER]"
+    pre = "[FILTER]"
     loss_name = "M1_vs_M2"
-
-    prefix_name = 'ecg_cybhi_'
-    if loss_name[:2] == "M2":
-        name = 'ecg_cybhi_2_'
-
     full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
-    print(full_path)
+
+    signals, models_info = prepare_cybhi_train_test_variables(loss_name, trained_model_directory)
+
     test_windows_xs = []
     test_windows_ys = []
-    for s, signal_data in enumerate(signals):
-        name = prefix_name + signal_data.name
-        if loss_name[-2:] == "M2":
-            test_signals.append(signal_data.processed_test_windows)
-        else:
-            test_signals.append(signal_data.processed_train_windows)
-
-        model_info = ModelInfo(Sd=signal_dim, Hd=hidden_dim, dataset_name=name, directory=signal_directory,
-                               DS=-5, t=-5, W=W, name="CYBHi {0}".format(s))
-
-        all_models_info.append(model_info)
-        all_indexes, test_windows_x, test_windows_y, _, _ = get_clean_indexes(test_signals[-1],
-                                                                              model_info.to_signal2model(),
-                                                                              overlap=0.11,
-                                                                              max_tol=0.7)
-        if loss_name[-2:] == loss_name[:2]:
-            test_windows_xs.append(test_windows_x[int(len(test_windows_x) * 0.5):])
-            test_windows_ys.append(test_windows_y[int(len(test_windows_x) * 0.5):])
-        else:
-            test_windows_xs.append(test_windows_x)
-            test_windows_ys.append(test_windows_y)
-
+    
     loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=all_models_info,
                                                test_signals=test_signals,
                                                X_matrix=test_windows_xs, Y_matrix=test_windows_ys, force_new=True,
-                                               mean_tol=0,
-                                               overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=1000000)
+                                               mean_tol=0.9, min_windows=min_windows,
+                                               overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=0.1)
 
 
     for i in [1, 10, 30, 60]:
@@ -1269,6 +1265,8 @@ if __name__ == "__main__":
 
     EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
                                          batch_size=60, decimals=5)
+
+
     # good_indices = np.where(size > limit)[0]
 
     # test_signals = [test_signals[i] for i in good_indices]

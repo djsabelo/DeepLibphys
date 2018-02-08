@@ -100,6 +100,27 @@ def remove_noise(signal, moving_avg_window=60, smooth_window=10):
     signal -= np.mean(abs(signal))
     return signal
 
+
+def remove_cybhi_noise(original_signal, moving_avg_window=60, smooth_window=10, fs=1000):
+    original_signal = original_signal - smooth(original_signal, fs)
+    original_signal = smooth(original_signal, int(smooth_window*8))
+    original_signal = scp.signal.decimate(original_signal, 4)
+
+    # original_signal -= (np.mean(abs(original_signal)))
+    moving_maximum = np.array(moving_max(original_signal, int(fs/8)))
+    moving_minimum = np.array(moving_min(original_signal, int(fs/8)))
+    moving_maximum = smooth(moving_maximum-moving_minimum, int(fs/8))
+    signal_ = original_signal / moving_maximum
+
+    signal = process_dnn_signal(signal_, 256, window_rmavg=None, confidence=0.01)
+    # plt.plot((original_signal - np.min(original_signal))*256/np.max(original_signal - np.min(original_signal)))
+    # plt.plot((signal_ - np.min(signal_/np.max(signal_)))*256/np.max(signal_ - np.min(signal_)))
+    # plt.plot(signal)
+    # plt.show()
+
+    return signal
+
+
 def process_signal(signal, interval_size, peak_into_data, decimate, regression):
     if (decimate is not None and isinstance(decimate, int)) and not isinstance(decimate, bool):
         signal = signal[100000:400000]
@@ -129,7 +150,8 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60,
     # plt.plot(signal[0])
     # plt.show()
 
-    signal = remove_moving_avg(signal, window_rmavg)
+    if window_rmavg is not None:
+        signal = remove_moving_avg(signal, window_rmavg)
     # plt.figure(2)
     # plt.plot(signal[0])
     # plt.show()
@@ -194,6 +216,16 @@ def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, w
     return np.array([descretitize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
 
 def descretitize_signal(signal, interval_size, confidence = 0.001):
+
+    signal = truncate_signal(signal, confidence)
+    signal -= np.min(signal)           # removed the minimum value
+    signal = signal / np.max(signal)   # made a discrete representation of the signal
+    signal *= (interval_size - 1)      # with "interval_size" steps (min = 0, max = interval_size-1))
+
+    return np.around(signal).astype(int) # insert signal into an array of signals
+
+
+def truncate_signal(signal, confidence):
     n, bins = np.histogram(signal.T, 10000)
     distribution_sum = np.cumsum(n)
     index_min = np.where(distribution_sum <= confidence * np.sum(n))[0]
@@ -202,13 +234,7 @@ def descretitize_signal(signal, interval_size, confidence = 0.001):
     MAX = bins[index_max[0]] if len(index_max) > 0 else np.max(signal)
     signal[signal >= MAX] = MAX
     signal[signal <= MIN] = MIN
-
-    signal -= np.min(signal)           # removed the minimum value
-    signal = signal / np.max(signal)   # made a discrete representation of the signal
-    signal *= (interval_size - 1)      # with "interval_size" steps (min = 0, max = interval_size-1))
-
-    return np.around(signal).astype(int) # insert signal into an array of signals
-
+    return signal
 
 def process_web_signal(signal, interval_size, smooth_window, peak_into_data, decimate=None, window=1, smooth_type='hanning'):
                    # smooth the signal
@@ -239,12 +265,74 @@ def remove_moving_avg(signal, window_size=60):
 
         if np.shape(signal[n[0]:n[1]])[-1] > 0:
             if len(np.shape(signal)) == 1:
-                signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]], axis=0))
+                signalx[i] = (signal[i] - np.mean(signal[n[0]:n[1]], axis=0))
             else:
-                signalx[:, n[0]:n[1]] = (signal[:, n[0]:n[1]] - np.mean(signal[:, n[0]:n[1]], axis=0))
+                signalx[:, i] = (signal[:, i] - np.mean(signal[:, n[0]:n[1]], axis=0))
 
     return signalx
 
+
+def moving_avg(signal, window_size=60):
+    signalx = np.zeros_like(signal)
+    for i in range(np.shape(signal)[-1]):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        if n[1] > np.shape(signal)[-1]:
+            n[1] -= np.shape(signal)[-1]
+
+        if np.shape(signal[n[0]:n[1]])[-1] > 0:
+            if len(np.shape(signal)) == 1:
+                signalx[i] = np.mean(signal[n[0]:n[1]], axis=0)
+            else:
+                signalx[:, i] = np.mean(signal[:, n[0]:n[1]], axis=0)
+
+    return signalx
+
+
+def moving_max(signal, window_size=60):
+    pool = Pool(10)
+
+    windows = []
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        if n[0] < window_size/2:
+            n[0] = 0
+        if n[1] > np.shape(signal)[-1]:
+            n[1] = np.shape(signal)[-1]
+
+        windows.append(signal[n[0]:n[1]])
+
+    returned = pool.starmap(moving_maxi, zip(windows))
+    pool.close()
+    return returned
+
+
+def moving_maxi(window):
+    return np.max(window, axis=0)
+
+
+def moving_min(signal, window_size=60):
+    pool = Pool(10)
+
+    windows = []
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        if n[0] < window_size/2:
+            n[0] = 0
+        if n[1] > np.shape(signal)[-1]:
+            n[1] = np.shape(signal)[-1]
+
+        windows.append(signal[n[0]:n[1]])
+
+    returned = pool.starmap(moving_mini, zip(windows))
+    pool.close()
+    return returned
+
+
+def moving_mini(window):
+    return np.min(window, axis=0)
 
 def remove_moving_std(signal, window_size=2000):
     signalx = np.zeros_like(signal)
@@ -446,7 +534,7 @@ def get_cyb_dataset_segmented(signal_dim, window_size=1024, dataset_dir=CYBHi_EC
     return train_dates, train_names, processed_train_signals, test_dates, test_names, processed_test_signals
 
 def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
-    dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
+    # dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
     full_paths = os.listdir(dataset_dir)
     train_signals = []
     test_signals = []
@@ -461,12 +549,15 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
             print("Processing file: {0}".format(file))
             try:
                 filename = file_path.split('/')[-1].split('.')[0]
-                name = filename[9:-6]
-                date = filename[:8]
+                name = filename.split('-')[1]
+                print(name)
+                date = filename.split('-')[0]
+                print(date)
                 if (index_names is not None) and (name not in index_names):
                     pass
                 else:
-                    signal = np.loadtxt(file)[:, 3]
+                    signal = np.loadtxt(file)
+                    # plt.plot()
                     # signal = sig.decimate(signal, 4)
                     N = len(signal)
                     time = len(signal)/fs
@@ -480,24 +571,29 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
                         train_signals.append(signal)
                         train_names.append(name)
                         train_dates.append(date)
+                        print("Train {0}".format(name))
                     else:
                         test_signals.append(signal)
                         test_names.append(name)
                         test_dates.append(date)
+                        print("Test {0}".format(name))
 
                     print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
             except ValueError:
                 print("Error")
                 pass
-    train_indexes = sorted(range(len(train_names)), key=lambda k: train_names[k])
-    test_indexes = sorted(range(len(test_names)), key=lambda k: test_names[k])
 
-    return np.array(train_dates)[train_indexes], \
-           np.array(train_names)[train_indexes], \
-           np.array(train_signals)[train_indexes],\
-           np.array(test_dates)[test_indexes], \
-           np.array(test_names)[test_indexes], \
-           np.array(test_signals)[test_indexes]
+    sorted_test_signals, sorted_train_signals = [], []
+    test_signals, test_names = np.array(test_signals), np.array(test_names)
+    sorted_train_indexes = sorted(range(len(train_names)), key=lambda k: train_names[k])
+
+    # sorted_train_signals = np.array(train_signals)[sorted_train_indexes]
+    for index in sorted_train_indexes: #security measure to make sure all names appear in both datasets
+        name = train_names[index]
+        sorted_test_signals.append(test_signals[np.where(test_names == name)[0]][0])
+        sorted_train_signals.append(train_signals[index])
+
+    return np.array(sorted_train_signals), np.array(sorted_test_signals), np.array(train_names)[sorted_train_indexes]
 
 
 def sort_index_by_key(key_array):
@@ -533,13 +629,17 @@ def get_multi_processed_signal(file_path, fs, dataset_dir, signal_dim, confidenc
                 signal = sig.decimate(signal, 2)
 
             if any(file_path[:-4] in s for s in first_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.01)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.01)
             elif any(file_path[:-4] in s for s in second_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.02)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.02)
             elif any(file_path[:-4] in s for s in third_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.03)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.03)
             else:
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=confidence)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=confidence)
             # plt.plot(np.arange(len(signal)) / 250, signal / np.max(signal))
             # plt.show()
                 # "223m", "106m", "222" - > experimentar o moving_std
@@ -1188,7 +1288,7 @@ def make_training_sets(batches, percentage_of_train):
 
     return train_indexes, test_indexes, train, test
 
-def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
+def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, name="" , cmap=plt.cm.Reds,
                           cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
     # plt.tight_layout()
 
@@ -1212,38 +1312,34 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
     spec = 100 * TN / (TN + FP)
     IR = np.sum(np.diag(confusion_matrix)) * 100 / np.sum(confusion_matrix)
 
+    # fig = plt.figure(name)
     fig, ax = plt.subplots()
+
     ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
                                        norm, N_Windows)
 
     ax.annotate('Id Rate of {0:.1f}%'.format(IR),
-                xy=(0.5, 0), xytext=(0, 60),
+                xy=(0.5, 0), xytext=(0, 50),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
-                size=15, ha='center', va='bottom')
-
-    ax.annotate('Accurancy of {0:.1f}%'.format(ACC),
-                xy=(0.5, 0), xytext=(0, 35),
-                xycoords=('axes fraction', 'figure fraction'),
-                textcoords='offset points',
-                size=15, ha='center', va='bottom')
+                size=12, ha='center', va='bottom')
 
     ax.annotate('Specificity of {0:.1f}%'.format(spec),
+                xy=(0.5, 0), xytext=(0, 30),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=12, ha='center', va='bottom')
+
+    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
                 xy=(0.5, 0), xytext=(0, 10),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
-                size=15, ha='center', va='bottom')
-
-    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
-                xy=(0.5, 0), xytext=(0, -10),
-                xycoords=('axes fraction', 'figure fraction'),
-                textcoords='offset points',
-                size=15, ha='center', va='bottom')
+                size=12, ha='center', va='bottom')
 
     # ax = prepare_confusion_pie(ax, confusion_matrix)
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
-    plt.title(title)
+    # plt.title(title)
     plt.show()
 
 def plot_confusion_matrix_with_pie(confusion_matrix, labels_pred, labels_true, rejection=None, title='Confusion matrix',

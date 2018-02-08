@@ -40,42 +40,39 @@ if __name__ == "__main__":
     signal_dim = 256
     hidden_dim = 256
     mini_batch_size = 16
-    batch_size = 128
+    batch_size = 32
     window_size = 512
-    save_interval = 1000
+    save_interval = 250
 
-
-    # old_signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(128, 1024)
-    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
-    old_signal_directory = signal_directory
-    noise_removed_path = "Data/CYBHi/signals_v2.npz"
+    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    noise_removed_path = "Data/CYBHi/signals_long_v2.npz"
     # processed_data_path = '../data/processed/biometry_cybhi[256].npz'
     fileDir = "Data/CYBHi"
 
-    pos_noise_rem_signals = np.load(noise_removed_path)
-    signals = np.load(fileDir + "/signals.npz")["signals"]
-    z = -3
-    z1 = 21
-    for s, signal_data in enumerate(signals[z:]):
-        name = 'ecg_cybhi_2_' + signal_data.name
+    signals = np.load(noise_removed_path)["signals"]
+    names = np.array([signal.name for signal in signals])
+    # signals = np.array(extract_train_part([signal.train_windows for signal in signals], 0.5))
+    signals = np.array(extract_train_part([signal.test_windows for signal in signals], 0.5))
+
+    step = 3
+    i = np.arange(0, 64, step)
+    x = 20
+    z = np.arange(i[x], i[x+1])
+    # z = np.arange(60, 63)
+    print(list(z))
+    for s, signal, name in zip(np.arange(len(signals))[z], signals[z], names[z]):
+        name = 'ecg_cybhi_M2_' + name
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                     batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
-                                    save_interval=save_interval, tolerance=1e-9, count_to_break_max=10)
+                                    save_interval=save_interval, tolerance=1e-9, count_to_break_max=15)
 
-        x_train, y_train = prepare_data(signal_data.processed_test_windows, signal2model, batch_percentage=0.5)
+        x_train, y_train = prepare_test_data([signal], signal2model, mean_tol=0.8, std_tol=0.05)
+        print("Compiling Model {0} for {1}".format(name, name))
         model = GRU.LibphysMBGRU(signal2model)
-        try:
-            model.load(model.get_file_tag(-5, -5), old_signal_directory)
-        except:
-            try:
-                model.load(model.get_file_tag(-5, -5), signal_directory)
-            except:
-                model = GRU.LibphysMBGRU(signal2model)
 
         running_ok = False
         while not running_ok:
-            print("Compiling Model {0} for {1}".format(name, signal_data.name))
             print("Initiating training... ")
             running_ok = model.train_model(x_train, y_train, signal2model)
             if not running_ok:
