@@ -96,6 +96,8 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
     else:
         prepare_data = False
 
+
+
     sizes = []
     removex = []
     for signal, model_info, i in zip(signals, signals_models, range(len(signals))):
@@ -110,7 +112,7 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
                                                batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
                                                randomize=False)
 
-            if np.shape(X_list)[0] > min_windows:
+            if np.shape(X_list)[0] >= min_windows:
                 X_matrix.append(X_list)
                 Y_matrix.append(Y_list)
                 sizes.append(np.shape(X_list)[0])
@@ -305,7 +307,7 @@ def filter_loss_tensor(signals, loss_tensor, all_models_info, W, min_windows=512
 # IDENTIFICATION
 
 
-def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1, name=""):
+def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1, name="", norm=False):
     if batch_size > 1:
         temp_loss_tensor = calculate_batch_min_loss(loss_x_tensor, batch_size)
     else:
@@ -317,7 +319,7 @@ def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1, 
 
     sinal_predicted_matrix = calculate_prediction_matrix(temp_loss_tensor, thresholds)
 
-    plot_confusion_matrix(sinal_predicted_matrix, signal_labels, model_labels, no_numbers=False, norm=False, name=name)
+    plot_confusion_matrix(sinal_predicted_matrix, signal_labels, model_labels, no_numbers=False, norm=True, name=name)
 
 
 def normalize_tensor(loss_tensor, lvl_acceptance=None):

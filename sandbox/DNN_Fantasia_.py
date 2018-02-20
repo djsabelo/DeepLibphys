@@ -28,13 +28,14 @@ def load_noisy_fantasia_signals(SNRx=None):
     return np.vstack((clean, np.hstack((noise1, noise2))))
 
 if __name__ == "__main__":
-    N_Windows = 200000000
-    W = 256
+    N_Windows = None
+    W = 512
     signal_dim = 256
     hidden_dim = 256
     batch_size = 256
     window_size = 1024
     fs = 250
+    isnew = True
 
     signal_directory = 'BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
     dir_name = TRAINED_DATA_DIRECTORY + signal_directory
@@ -43,10 +44,10 @@ if __name__ == "__main__":
     s_models = db.ecg_1024_256_RAW
 
     loss_tensor = []
-    SNR_DIRECTORY = "../data/validation/Nov_Fantasia"
+    SNR_DIRECTORY = "../data/validation/FANTASIA"
 
-    bs = 60
-    filename = SNR_DIRECTORY + "/LOSS_TENSOR_[256]_NO_LIMIT.npz"
+    bs = 120
+    filename = SNR_DIRECTORY + "/LOSS_TENSOR_[512]_FILTER.npz"
     # filename = SNR_DIRECTORY + "/LOSS_TENSOR_[256].npz"
     model = db.ecg_1024_256_RAW
     filenames = [filename]
@@ -57,9 +58,9 @@ if __name__ == "__main__":
 
 
     signal = extract_test_part(signal)
-    loss_tensor = RLTC.get_or_save_loss_tensor(full_path=filename, force_new=False, N_Windows=N_Windows, W=W,
-                                               models=model, test_signals=signal, mean_tol=0,
-                                               overlap=0.33, mini_batch=256, std_tol=2000)
+    loss_tensor = RLTC.get_or_save_loss_tensor(full_path=filename, force_new=isnew, N_Windows=N_Windows, W=W,
+                                               models=model, test_signals=signal, mean_tol=0.9,
+                                               overlap=0.33, mini_batch=256, std_tol=0.05)
 
     # loss_tensor = loss_tensor[list(range(14))+list(range(15, 40))][:, list(range(15))+list(range(16, 40))]
 

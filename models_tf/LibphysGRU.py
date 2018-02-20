@@ -5,8 +5,9 @@ import time
 import sys
 import math
 import os
-import theano
-import theano.tensor as T
+import tensorflow as tf
+# import theano
+# import theano.tensor as T
 import matplotlib.pyplot as plt
 from DeepLibphys.utils.functions.common import *
 
@@ -17,100 +18,51 @@ class LibphysGRU:
 
             # Assign instance variables
             self.model_type = model_type
-            if signal2model is not None:
-                self.signal_type = signal2model.signal_type
-                self.signal_dim = signal2model.signal_dim
-                self.batch_size = 0
-                if self.signal_dim is None:
-                    self.signal_dim = "RG"
+            self.signal2model = signal2model
+            self.n_trained_data = 0
+            self.current_learning_rate = signal2model.learning_rate_val
 
-                self.hidden_dim = signal2model.hidden_dim
-                self.bptt_truncate = signal2model.bptt_truncate
-                self.current_learning_rate = signal2model.learning_rate_val
-                self.model_name = signal2model.model_name
-                self.start_time = 0
-                self.signal_dim = signal2model.signal_dim
-                self.mini_batch_size = signal2model.mini_batch_size
+            if self.signal_dim is None:
+                self.signal_dim = "RG"
 
-                # Theano: Created GRU variables
-                E, U, W, V, b, c = parameters
+            self.start_time = 0
+            self.parameters = parameters
 
-                # SGD / rmsprop: Initialize parameters
+            # SGD / rmsprop: Initialize parameters
+            # Created a dictionary of shared variables
+            self.parameters_names = ["E", "V", "U", "W", "b", "c"]             # parameter names
+            self.parameters_m_names = ["m" + par_name
+                                       for par_name in self.parameters_names]  # SGD parameter names (for RMSProp)
 
-                # Theano: Created shared variables
-                self.E = theano.shared(name='E', value=E.astype(theano.config.floatX))
-                self.U = theano.shared(name='U', value=U.astype(theano.config.floatX))
-                self.W = theano.shared(name='W', value=W.astype(theano.config.floatX))
-                self.V = theano.shared(name='V', value=V.astype(theano.config.floatX))
-                self.b = theano.shared(name='b', value=b.astype(theano.config.floatX))
-                self.c = theano.shared(name='c', value=c.astype(theano.config.floatX))
+            self.variables_dict = {par_name: self.to_tensor_flow(par_name)
+                                   for par_name in self.parameters_names + self.parameters_m_names}
+            self.session = tf.Session()
 
-                # SGD / rmsprop: Initialize parameters
-                self.mE = theano.shared(name='mE', value=np.zeros(E.shape).astype(theano.config.floatX))
-                self.mU = theano.shared(name='mU', value=np.zeros(U.shape).astype(theano.config.floatX))
-                self.mV = theano.shared(name='mV', value=np.zeros(V.shape).astype(theano.config.floatX))
-                self.mW = theano.shared(name='mW', value=np.zeros(W.shape).astype(theano.config.floatX))
-                self.mb = theano.shared(name='mb', value=np.zeros(b.shape).astype(theano.config.floatX))
-                self.mc = theano.shared(name='mc', value=np.zeros(c.shape).astype(theano.config.floatX))
-            else:
-                self.signal_type = 0
-                self.signal_dim = 0
-                self.hidden_dim = 0
-                self.bptt_truncate = -1
-                self.current_learning_rate = 0
-                self.model_name = ""
-                self.start_time = 0
-                self.signal_dim = 0
-                self.mini_batch_size = 0
+            init = tf.initialize_all_variables()
 
-                self.E, self.U, self.W, self.V, self.b, self.c = [], [], [], [], [], []
+            # Launch the graph
+            self.session = tf.Session()
+            self.session.run(init)
 
-    def calculate_gradients(self, cost, parameters):
-        return [T.grad(cost, parameter) for parameter in parameters]
-        # threshold = 1.1
-        # gradients = []
-        # for parameter in parameters:
-        #     gradient = T.grad(cost, parameter)
-        #     indexes = T.nonzero(T.gt(T.abs_(gradient * cost), threshold), True)
-        #     T.set_subtensor(gradient[indexes], \
-        #                     threshold * gradient[indexes] \
-        #                     * cost / T.abs_(gradient[indexes] * cost))
-        #     gradients.append(gradient)
-        #return gradients
+    def to_tensor_flow(self, name):
+        E, V, U, W, b, c = self.parameters
+        try:
+            return tf.convert_to_tensor(eval(name), name=name, dtype=tf.float32)
+        except NameError:
+            family_name = name[1:]
+        return tf.zeros_like(eval(family_name), dtype=tf.float32)
+
+    def calculate_gradients(self, cost):
+        return [tf.gradients(cost, parameter) for parameter in self.parameters]
 
     def get_m(self, decay, m, d):
         return decay * m + (1 - decay) * d ** 2
 
-    def update_RMSPROP(self, cost, parameters, derivatives, x, y):
-        learning_rate = T.scalar('learning_rate')
-        decay = T.scalar('decay')
+    def update_RMSPROP(self, cost):
+        learning_rate, decay = self.current_learning_rate, self.signal2model.decay
+        optimizer = tf.train.RMSPropOptimizer(learning_rate, decay)
+        return optimizer.minimize(cost)
 
-        [E, V, U, W, b, c] = parameters
-        [dE, dV, dU, dW, db, dc] = derivatives
-
-        mE = self.get_m(decay, self.mE, dE)
-        mU = self.get_m(decay, self.mU, dU)
-        mW = self.get_m(decay, self.mW, dW)
-        mV = self.get_m(decay, self.mV, dV)
-        mb = self.get_m(decay, self.mb, db)
-        mc = self.get_m(decay, self.mc, dc)
-
-        self.sgd_step = theano.function(
-            [x, y, learning_rate, theano.In(decay, value=0.95)],
-            [],
-            updates=[(E, E - learning_rate * dE / T.sqrt(mE + 1e-6)),
-                     (U, U - learning_rate * dU / T.sqrt(mU + 1e-6)),
-                     (W, W - learning_rate * dW / T.sqrt(mW + 1e-6)),
-                     (V, V - learning_rate * dV / T.sqrt(mV + 1e-6)),
-                     (b, b - learning_rate * db / T.sqrt(mb + 1e-6)),
-                     (c, c - learning_rate * dc / T.sqrt(mc + 1e-6)),
-                     (self.mE, mE),
-                     (self.mU, mU),
-                     (self.mW, mW),
-                     (self.mV, mV),
-                     (self.mb, mb),
-                     (self.mc, mc)
-                     ], allow_input_downcast=True)
 
     def train_block(self, signals, signal2model, signal_indexes=None, n_for_each=12, overlap=0.33, random_training=True,
                     start_index=0, track_loss=False, loss_interval=1, train_ratio=0.33, validation=False):
@@ -170,17 +122,11 @@ class LibphysGRU:
                 Y_windows, y_end_values, n_windows, last_index = segment_signal(signals[i][1:], signal2model.window_size,
                                                                                 overlap=overlap, start_index=start_index)
 
-                # n_for_each = n_for_each if n_for_each < np.shape(X_windows)[0] else np.shape(X_windows)[0]
-                # n_for_each = n_for_each if n_for_each % self.mini_batch_size == 0 \
-                #     else self.mini_batch_size * int(n_for_each/self.mini_batch_size)
-
                 last_training_index = int(n_windows * train_ratio)
-                # List of the windows to be inserted in the dataset
                 if random_training:
                     window_indexes = np.random.permutation(last_training_index)  # randomly select windows
                 else:
                     window_indexes = list(range((n_windows))) # first windows are selected
-
 
                 # Insertion of the windows of this signal in the general dataset
                 if len(x_train) == 0:
@@ -191,31 +137,18 @@ class LibphysGRU:
                     if validation:
                         x_validation = X_windows[window_indexes[n_for_each:n_for_each*2], :]
                         y_validation = Y_windows[window_indexes[n_for_each:n_for_each*2], :]
-
-
-                    # # The rest is for test data
-                    # x_test = X_windows[last_training_index:, :]
-                    # y_test = Y_windows[last_training_index:, :]
                 else:
                     x_train = np.append(x_train, X_windows[window_indexes[0:n_for_each], :], axis=0)
                     y_train = np.append(x_train, Y_windows[window_indexes[0:n_for_each], :], axis=0)
-                    # x_test = np.append(x_train, X_windows[window_indexes[n_for_each:], :], axis=0)
-                    # y_test = np.append(x_train, Y_windows[window_indexes[n_for_each:], :], axis=0)
 
                     if validation:
                         x_validation = np.append(x_validation, X_windows[window_indexes[n_for_each:n_for_each*2], :], axis=0)
                         y_validation = np.append(y_validation, Y_windows[window_indexes[n_for_each:n_for_each*2], :], axis=0)
 
-                # Save test data
-                # self.save_test_data(signal2model.signal_directory, [x_test, y_test])
-
-
         # Start time recording
         self.start_time = time.time()
         t1 = time.time()
-        # for x in x_train:
-        #     plt.plot(x)
-        #     plt.show()
+
         # Start training model
         if validation:
             returned = self.train_model(x_train, y_train, signal2model, track_loss, loss_interval,
@@ -251,7 +184,7 @@ class LibphysGRU:
         if x_validation is None:
             x_validation = x_train
             y_validation = y_train
-        self.batch_size = np.shape(x_train)[0]
+        self.n_trained_data = np.shape(x_train)[0]
         loss = [self.calculate_total_loss(x_validation, y_validation)]
         lower_error_threshold, higher_error_threshold = [10**(-5), 1]
         lower_error = signal2model.lower_error
@@ -408,7 +341,8 @@ class LibphysGRU:
                  b=self.b.get_value(),
                  c=self.c.get_value(),
                  train_time=self.train_time,
-                 start_time=self.start_time
+                 start_time=self.start_time,
+                 n_trained_data=self.n_trained_data
                  )
 
     def load(self, file_tag=None, dir_name=None):
@@ -477,11 +411,6 @@ class LibphysGRU:
             self.start_time = start_time
         except:
             print("Error loading variable {0}".format("start_time"))
-        try:
-            batch_size = npzfile["start_time"]
-            self.batch_size = batch_size
-        except:
-            print("Error loading variable {0}".format("start_time"))
 
         sys.stdout.flush()
 
@@ -547,24 +476,6 @@ class LibphysGRU:
     def set_parameters(self, parameters):
         self.E, self.V, self.U, self.W, self.b, self.c = parameters
 
-    def restart_parameters(self):
-        E, V, U, W, b, c = self._get_new_parameters()
-
-        self.E = theano.shared(name='E', value=E.astype(theano.config.floatX))
-        self.U = theano.shared(name='U', value=U.astype(theano.config.floatX))
-        self.W = theano.shared(name='W', value=W.astype(theano.config.floatX))
-        self.V = theano.shared(name='V', value=V.astype(theano.config.floatX))
-        self.b = theano.shared(name='b', value=b.astype(theano.config.floatX))
-        self.c = theano.shared(name='c', value=c.astype(theano.config.floatX))
-
-        # SGD / rmsprop: Initialize parameters
-        self.mE = theano.shared(name='mE', value=np.zeros(E.shape).astype(theano.config.floatX))
-        self.mU = theano.shared(name='mU', value=np.zeros(U.shape).astype(theano.config.floatX))
-        self.mV = theano.shared(name='mV', value=np.zeros(V.shape).astype(theano.config.floatX))
-        self.mW = theano.shared(name='mW', value=np.zeros(W.shape).astype(theano.config.floatX))
-        self.mb = theano.shared(name='mb', value=np.zeros(b.shape).astype(theano.config.floatX))
-        self.mc = theano.shared(name='mc', value=np.zeros(c.shape).astype(theano.config.floatX))
-
-    @abstractmethod
-    def _get_new_parameters(self):
-        pass
+    # @abstractmethod
+    # def _get_new_parameters(self):
+    #     pass

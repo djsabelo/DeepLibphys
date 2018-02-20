@@ -751,9 +751,22 @@ def get_signals(signal_dim, dataset_dir, peak_into_data=False, decimate=None, va
 def extract_test_part(signals, ratio=0.33, overlap=0.33):
     return [signal[int(len(signal) * ratio + (1 / overlap) - 1):] for signal in signals]
 
+def extract_validation_part(signals, ratio_in=0.33, ratio_off=0.5, overlap=0.33):
+    return [signal[int(len(signal) * ratio_in + (1 / overlap) - 1):int(len(signal) * ratio_off - (1 / overlap) - 1)] for signal in signals]
+
 
 def extract_train_part(signals, ratio=0.33):
     return [signal[:int(len(signal) * ratio)] for signal in signals]
+
+def check_model_existence(signal_models):
+    for model in signal_models:
+        filename = DATASET_DIRECTORY + model.directory + "GRU_" + model.dataset_name +\
+                   "[{}.{}.-1.-5-5].npz".format(model.Hd, model.Sd)
+        if not os.path.isfile(filename):
+            return False
+
+    return True
+
 
 
 def get_biometric_signals(signal_dim, dataset_dir, index, peak_into_data=False, decimate=None, smooth_window=10, regression=False):
@@ -1803,8 +1816,8 @@ def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, m
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
 
-    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap, max_tol=mean_tol,
-                                                                     std_tol=std_tol)
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     max_tol=mean_tol, std_tol=std_tol)
 
     x__matrix = np.array(x__matrix)
     y__matrix = np.array(y__matrix)

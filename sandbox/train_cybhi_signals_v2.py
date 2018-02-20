@@ -36,45 +36,139 @@ def prepare_data(windows, signal2model, overlap=0.11, batch_percentage=1):
     return x__matrix[indexes], y__matrix[indexes]
 
 
+def manual_extraction(x_train, y_train):
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
+    l, = plt.plot(x_train[0], lw=2)
+
+    class BooleanSwitcher(object):
+        indexes = []
+        ind = 0
+
+        def yes(self, event):
+            if self.ind < len(x_train):
+                self.indexes.append(self.ind)
+                self.ind += 1
+            if self.ind < len(x_train):
+                l.set_ydata(x_train[self.ind])
+                plt.draw()
+            else:
+                self.crop()
+                plt.close()
+
+        def no(self, event):
+            self.ind += 1
+            if self.ind < len(x_train):
+                l.set_ydata(x_train[self.ind])
+                plt.draw()
+            else:
+                self.crop()
+                plt.close()
+
+        def crop(self):
+            c = len(self.indexes) % 16
+            self.indexes = self.indexes[:(len(self.indexes) - c)]
+    callback = BooleanSwitcher()
+    axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+    axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+    by = Button(axnext, 'Yes')
+    by.on_clicked(callback.yes)
+    bn = Button(axprev, 'No')
+    bn.on_clicked(callback.no)
+    plt.show()
+    return x_train[callback.indexes], y_train[callback.indexes]
+
+def try_to_load(model):
+    try:
+        model.load(dir_name="ECG_BIOMETRY[CYBHi]")
+        return
+    except:
+        for i in range(2500, 0, -250):
+            try:
+                model.load(dir_name="ECG_BIOMETRY[CYBHi]", file_tag=model.get_file_tag(0, i))
+                print("Loaded! epoch {0}".format(i))
+                return
+            except:
+                try:
+                    model.load(dir_name="ECG_BIOMETRY[64.512.8]")
+                except:
+                    pass
+
+    model.load(dir_name="ECG_BIOMETRY[32.512]")
+    return
+
 if __name__ == "__main__":
     signal_dim = 256
     hidden_dim = 256
     mini_batch_size = 16
-    batch_size = 32
+    batch_size = 256
     window_size = 512
     save_interval = 250
 
-    signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    # signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    # signal_directory = 'ECG_BIOMETRY[{0}.{1}.8]'.format(batch_size, window_size)
+    signal_directory = 'ECG_BIOMETRY[CYBHi]'
     noise_removed_path = "Data/CYBHi/signals_long_v2.npz"
-    # processed_data_path = '../data/processed/biometry_cybhi[256].npz'
-    fileDir = "Data/CYBHi"
+    fileDir = "Data/CYBHi/2nd"
 
+    moment = 1
     signals = np.load(noise_removed_path)["signals"]
     names = np.array([signal.name for signal in signals])
-    # signals = np.array(extract_train_part([signal.train_windows for signal in signals], 0.5))
-    signals = np.array(extract_train_part([signal.test_windows for signal in signals], 0.5))
+    signals = np.array(extract_train_part([signal.train_windows for signal in signals], 0.5))
+    # signals = np.array(extract_train_part([signal.test_windows for signal in signals], 0.5))
 
-    step = 3
-    i = np.arange(0, 64, step)
-    x = 20
+    # [print(DATASET_DIRECTORY + 'GRU_ecg_cybhi_M{0}_{1}[256.256.-1.-5.-5].npz'.format(moment, name)) for name in names]
+    # [print(name + ":" + str(os.path.isfile(DATASET_DIRECTORY + signal_directory + '/GRU_ecg_cybhi_M{0}_{1}[256.256.-1.-5.-5].npz'.format(moment, name)))) for name in names]
+    #
+    #
+    # exit()
+    step = 10
+    i = np.arange(0, 63, step)
+    x = 0
     z = np.arange(i[x], i[x+1])
+    # z = np.arange(names.tolist().index("CF") , int(len(signals)/2))#, len(signals))
     # z = np.arange(60, 63)
     print(list(z))
     for s, signal, name in zip(np.arange(len(signals))[z], signals[z], names[z]):
-        name = 'ecg_cybhi_M2_' + name
+        name = 'ecg_cybhi_M{0}_{1}'.format(moment, name)
         signal2model = Signal2Model(name, signal_directory, signal_dim=signal_dim, hidden_dim=hidden_dim,
                                     batch_size=batch_size,
                                     mini_batch_size=mini_batch_size, window_size=window_size,
                                     save_interval=save_interval, tolerance=1e-9, count_to_break_max=15)
 
-        x_train, y_train = prepare_test_data([signal], signal2model, mean_tol=0.8, std_tol=0.05)
-        print("Compiling Model {0} for {1}".format(name, name))
+        x_train, y_train = prepare_test_data([signal], signal2model)#, mean_tol=0.8, std_tol=0.05)
+
+        # x_train, y_train = manual_extraction(x_train, y_train)
+        print("Final number of windows: {0}".format(len(x_train)))
+        print("Compiling Model {0} for {1}".format(s, name))
+
+        path = fileDir + "/Signals"
+        full_path = path + "/{0}.pdf".format(signal2model.model_name)
+        # if savePdf:
+        print("Saving {0}.pdf".format(full_path))
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        fig = plt.figure()
+        pdf = PdfPages(full_path)
+        for x in x_train:
+            plt.plot(x)
+            pdf.savefig(fig)
+            plt.clf()
+        pdf.close()
         model = GRU.LibphysMBGRU(signal2model)
 
+        n_runs = 0
         running_ok = False
         while not running_ok:
+            n_runs += 1
+
+            if n_runs < 3:
+                try_to_load(model)
+
             print("Initiating training... ")
             running_ok = model.train_model(x_train, y_train, signal2model)
+
             if not running_ok:
                 model = GRU.LibphysMBGRU(signal2model)
 

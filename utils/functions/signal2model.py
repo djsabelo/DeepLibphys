@@ -66,11 +66,12 @@ class Signal2Model(object):
     signal_type, model_type = [0, 0]
     decay = 0
     lower_error, lower_learning_rate, count_to_break_max = 0, 0, 0
+    n_grus = 0
 
     def __init__(self, model_name, signal_directory, signal_dim=64, hidden_dim=256, learning_rate_val=0.01,
                  batch_size=256, window_size=256, number_of_epochs=100000, save_interval=1000, number_of_batches=1,
                  mini_batch_size=16, bptt_truncate=-1, signal_type=None, model_type=None, decay=0.9, tolerance=1e-5,
-                 lower_error=1e-3, lower_learning_rate=1e-5, count_to_break_max=5):
+                 lower_error=1e-3, lower_learning_rate=1e-5, count_to_break_max=5, n_grus=3):
         self.signal_dim = signal_dim
         self.hidden_dim = hidden_dim
         self.model_name = model_name
@@ -85,6 +86,7 @@ class Signal2Model(object):
         self.mini_batch_size = mini_batch_size
         self.bptt_truncate = bptt_truncate
         self.tolerance = tolerance
+        self.n_grus = n_grus
         self.lower_error, self.lower_learning_rate, self.count_to_break_max = \
             lower_error, lower_learning_rate, count_to_break_max
 

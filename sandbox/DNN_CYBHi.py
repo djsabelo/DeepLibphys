@@ -1204,64 +1204,67 @@ def prepare_cybhi_train_test_variables(loss_name, trained_model_directory):
     names = np.array([signal.name for signal in signals])
 
     if loss_name[-2:] == "M1":
-        test_windows = [signal.test_windows for signal in signals]
-    else:
         test_windows = [signal.train_windows for signal in signals]
+    else:
+        test_windows = [signal.test_windows for signal in signals]
 
     if loss_name[-2:] == loss_name[:2]:
-        signals = np.array(extract_train_part(test_windows, 0.5))
+        signals = np.array(extract_test_part(test_windows, 0.5, 0.11))
     else:
         signals = np.array(test_windows)
 
-    all_models_info = [ModelInfo(Sd=256, Hd=256, dataset_name=prefix_name + str(s), directory=trained_model_directory,
-                           DS=-5, t=-5, W=W, name="CYBHi {0}".format(s+1)) for s, name in enumerate(names)]
+    all_models_info = [ModelInfo(Sd=256, Hd=256, dataset_name=prefix_name + name, directory=trained_model_directory,
+                                 DS=-5, t=-5, W=W, name="CYBHi {0}".format(s + 1)) for s, name in enumerate(names)]
 
     return signals, all_models_info
 
 
 if __name__ == "__main__":
     signal_dim = 256
+    isnew = False
     hidden_dim = 256
-    mini_batch_size = 16
+    mini_batch_size = 256
     batch_size = 32
     fs = 250
     window_size = 512
-    W = 256
-    save_interval = 1000
-    iterations = 1
+    W = 512
     bs = 60
     all_EERs = []
     seconds = (W / fs) + (np.arange(1, bs) * W * 0.11) / fs
     loss_tensor = []
     mean_EERs = []
     limit = 0
-    min_windows = 250
+    min_windows = 100
     # prefix = "_LONG_{0}".format(limit)
     prefix = "_LONG_{0}".format(limit)
 
-    trained_model_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(batch_size, window_size)
+    # trained_model_directory = 'ECG_BIOMETRY[32.512.4]'.format(batch_size, window_size)
+    trained_model_directory = 'ECG_BIOMETRY[64.512.8]'.format(batch_size, window_size)
 
-    all_models_info = []
-    test_signals = []
+    pre = "[NO FILTER]"
+    loss_name = "M1_vs_M1"
+    print(loss_name)
+    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}[10-19]".format(pre, loss_name)
+    # full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
 
-    pre = "[FILTER]"
-    loss_name = "M1_vs_M2"
-    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
+    test_signals, models_info = prepare_cybhi_train_test_variables(loss_name, trained_model_directory)
 
-    signals, models_info = prepare_cybhi_train_test_variables(loss_name, trained_model_directory)
+    test_signals = test_signals[0:10]
+    models_info = models_info[0:10]
+    loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=models_info,
+                                               test_signals=test_signals, force_new=isnew, min_windows=min_windows,
+                                               overlap=0.11, batch_percentage=0, mini_batch=mini_batch_size)
 
-    test_windows_xs = []
-    test_windows_ys = []
-    
-    loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=all_models_info,
-                                               test_signals=test_signals,
-                                               X_matrix=test_windows_xs, Y_matrix=test_windows_ys, force_new=True,
-                                               mean_tol=0.9, min_windows=min_windows,
-                                               overlap=0.11, batch_percentage=0, mini_batch=32, std_tol=0.1)
+    # loss_tensor, models_info = RLTC.filter_loss_tensor(test_signals, loss_tensor, models_info, min_windows=100, overlap=0.11,
+    #                                       max_tol=0.8, std_tol=0.1, W=W)
 
+    mask = mask_without_indexes(loss_tensor, [0, 1])#, 49, 51, 57, 63])
+    loss_tensor = loss_tensor[mask][:, mask]
+    models_info = np.array(models_info)[mask]
 
+    # loss_tensor = (loss_tensor ) / np.max(loss_tensor, 0)
     for i in [1, 10, 30, 60]:
-        RLTC.identify_biosignals(loss_tensor, all_models_info, batch_size=i)
+        RLTC.identify_biosignals(loss_tensor, models_info, batch_size=i)
 
     EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
                                          batch_size=60, decimals=5)
