@@ -29,10 +29,9 @@ class Autoencoder:
 
     def fit(self, x, n_epochs=15, learning_rate=0.001, batch_size=32, display_step=1, save=True, name='1', load=False):
         # tf Graph input
-        # graph = tf.Graph()
-        # with graph.as_default():
-
-        X = tf.placeholder("float", [None,x.shape[1],1])
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            X = tf.placeholder("float", [None,x.shape[1],1])
         #Y = tf.placeholder("float", [None, n_classes])
 
 
@@ -44,28 +43,29 @@ class Autoencoder:
         #self.layer_3 =
         #self.layer_4 =
         #x = tf.convert_to_tensor(x, np.float32)
-        self.build_model(x)
+            self.build_model(x)
 
         # self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=16,
         #                                 padding='same')
         # self.layer_2 = tf.layers.conv1d(self.layer_1, x.shape[1], kernel_size=16, padding='same')
 
-        saver = tf.train.Saver()
-        # Try to plot costs for different learning rates in order to optimize lr!!!
-        self.costs = []
+            saver = tf.train.Saver()
+            # Try to plot costs for different learning rates in order to optimize lr!!!
+            self.costs = []
 
-        # Define loss and optimizer
-        cost = tf.reduce_mean(tf.squared_difference(self.layer_2, x))
-        optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
-        
-        # Initializing the variables
-        init = tf.global_variables_initializer()
-        
-        self.sess = tf.Session() 
+            # Define loss and optimizer
+            cost = tf.reduce_mean(tf.squared_difference(self.layer_2, x))
+            optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+
+            # Initializing the variables
+            init = tf.global_variables_initializer()
+
+        self.sess = tf.Session(graph=self.graph)
         self.sess.run(init)
         if load:
             #saver = tf.train.import_meta_graph(PATH + name + '.meta')
-            saver.restore(self.sess, tf.train.latest_checkpoint(PATH + './'))#PATH + './' ))))
+            #saver.restore(self.sess, tf.train.latest_checkpoint(PATH + './'))#PATH + './' ))))
+            saver.restore(self.sess, PATH + name + '.ckpt')
             print("Model {} Loaded".format(name))
         
         # Training cycle
@@ -91,10 +91,12 @@ class Autoencoder:
 
         if save:
             # add subfolder for more than 1 trained model
-            save_path = saver.save(self.sess, PATH + name)
+            #saver.save(self.sess, PATH + name)
+            saver.save(self.sess, PATH + name + '.ckpt')
             print("Model saved in file: %s" % PATH + name)
 
     def build_model(self, x):
+        # with self.graph.as_default():
         self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=64, padding='same')
         self.layer_2 = tf.layers.conv1d(self.layer_1, x.shape[1], kernel_size=64, padding='same')
 
@@ -103,11 +105,12 @@ class Autoencoder:
     
     def reconstruct(self, x_t):
         # Reconstructs the input signal
-        X = tf.placeholder("float", [None,x_t.shape[1],1])
-        self.build_model(x_t)
-        init = tf.global_variables_initializer()
-        self.sess = tf.Session()
-        self.sess.run(init)
+        with self.graph.as_default():
+            X = tf.placeholder("float", [None,x_t.shape[1],1])
+            self.build_model(x_t)
+            init = tf.global_variables_initializer()
+            self.sess = tf.Session()
+            self.sess.run(init)
         return self.sess.run(self.layer_2, feed_dict={X: x_t})
         
     def get_latent(self, x_t):

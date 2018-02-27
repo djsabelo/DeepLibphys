@@ -6,7 +6,7 @@ PATH = "/home/bento/models/"
 
 # Create model
 class Autoencoder:
-    def __init__(self, n_input=1024, n_hidden_1=512, n_hidden_2=2):
+    def __init__(self, n_input=1024, n_hidden_1=512, n_hidden_2=256):
         # n_hidden_1: 1st and 3rd layer number of neurons
         # n_hidden_2: 2nd(Latent) layer number of neurons
         # n_input: length of ECG window
@@ -104,7 +104,7 @@ class Autoencoder:
         self.layer_3 = tf.nn.sigmoid(tf.add(tf.matmul(self.layer_2, tf.transpose(self.weights['h2'])), self.biases['b3']))
         self.layer_4 = tf.matmul(self.layer_3, tf.transpose(self.weights['h1']))
         return self.sess.run(self.layer_4, feed_dict={X: x_t})
-        
+
     def get_latent(self, x_t):
         # Returns the latent representation of the input signal
         X = tf.placeholder("float", x_t.shape)
