@@ -84,13 +84,15 @@ print("X shape:", x.shape)
 #with tf.device('/device:GPU:0'):
 x_train = x[:32768]
 model = Autoencoder()
-x_train = x_train.reshape(16,2048,1)
+x_train = x_train.reshape(16,2048,1)#1,2048)
 print(x_train.shape)
 
-model.fit(x_train, n_epochs=2, learning_rate=0.0005, batch_size=8, load=True, save=True, name='1/CAE')
+model.fit(x_train, n_epochs=30, learning_rate=0.005, batch_size=8, load=False, save=False, name='1/CAE')
 
-test = x[33000:34024].reshape(1,-1,1)
+test = x_train.reshape(1,-1,1)
 
+# Porque é que o sinal fica invertido?
+# Porque não fazer overfit?
 
 pred = model.reconstruct(test)
 print(pred.shape)
@@ -111,20 +113,10 @@ plt.subplot(212)
 plt.title("Predicted Signal")
 plt.ylabel('Normalized Voltage')
 plt.xlabel('Samples')
-plt.plot(pred[0,0,:])#.flatten())
+plt.plot(pred.flatten())
 plt.pause(0.05)
 plt.show()
 
-plt.ion()
-for i in range(1000):
-    plt.title("Predicted Signal")
-    plt.ylabel('Normalized Voltage')
-    plt.xlabel('Samples')
-    plt.plot(pred[0,i,:])#.flatten())
-    plt.pause(0.05)
-    #plt.show()
-    plt.clf()
-exit()
 #np.save('/home/bento/costs3_10.npy', costs)
 #np.save('/home/bento/weights3_10.npy', weights)
 

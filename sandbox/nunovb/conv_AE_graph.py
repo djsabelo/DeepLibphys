@@ -7,14 +7,14 @@ PATH = "/home/bento/models/"
 
 # Create model
 class Autoencoder:
-    def __init__(self, n_input=1024, n_hidden_1=128, n_hidden_2=16):
+    def __init__(self, n_input=1024, n_hidden_1=256, n_hidden_2=128):
         # n_hidden_1: 1st and 3rd layer number of neurons
         # n_hidden_2: 2nd(Latent) layer number of neurons
         # n_input: length of ECG window
         # Store layers weight & bias - try different weights for decoder layers
         self.n_input = n_input
         self.n_hidden_1 = n_hidden_1
-        #self.n_hidden_2 = n_hidden_2
+        self.n_hidden_2 = n_hidden_2
         '''self.weights = {
             'h1': tf.Variable(tf.random_normal([n_input, n_hidden_1])), #tf.initializers.orthogonal()([n_input, n_hidden_1]),
             'h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2]))}#, stddev=math.sqrt(6) / math.sqrt(n_input + n_hidden_2 + 1)))}
@@ -31,7 +31,7 @@ class Autoencoder:
         # tf Graph input
         self.graph = tf.Graph()
         with self.graph.as_default():
-            X = tf.placeholder("float", [None,x.shape[1],1])
+            X = tf.placeholder("float", [None, x.shape[1], 1])
         #Y = tf.placeholder("float", [None, n_classes])
 
 
@@ -54,7 +54,7 @@ class Autoencoder:
             self.costs = []
 
             # Define loss and optimizer
-            cost = tf.reduce_mean(tf.squared_difference(self.layer_2, x))
+            cost = tf.reduce_mean(tf.squared_difference(self.layer_4, x))
             optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 
             # Initializing the variables
@@ -97,8 +97,20 @@ class Autoencoder:
 
     def build_model(self, x):
         # with self.graph.as_default():
-        self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=64, padding='same')
-        self.layer_2 = tf.layers.conv1d(self.layer_1, x.shape[1], kernel_size=64, padding='same')
+        #print(tf.convert_to_tensor(x, np.float32))
+        self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=2,
+                                        padding='same')
+        print(self.layer_1)
+        self.pool_1 = tf.layers.max_pooling1d(self.layer_1, 2, strides=2, padding='same')
+        print(self.pool_1)
+        self.layer_2 = tf.layers.conv1d(self.pool_1, self.n_hidden_2, kernel_size=2, padding='same')
+        print(self.layer_2)
+        self.layer_3 = tf.layers.conv1d(self.layer_2, self.n_hidden_1, kernel_size=2, padding='same')
+        print(self.layer_3)
+        self.unpool_1 = tf.keras.layers.UpSampling1D(2)(self.layer_3)
+        print(self.unpool_1)
+        self.layer_4 = tf.layers.conv1d(self.unpool_1, x.shape[2], kernel_size=2, padding='same')
+        #print(self.layer_2)
 
     def get_cost_vector(self):
         return self.sess.run(tf.cast(self.costs, dtype=tf.float32))
@@ -111,7 +123,7 @@ class Autoencoder:
             init = tf.global_variables_initializer()
             self.sess = tf.Session()
             self.sess.run(init)
-        return self.sess.run(self.layer_2, feed_dict={X: x_t})
+        return self.sess.run(self.layer_4, feed_dict={X: x_t})
         
     def get_latent(self, x_t):
         # Returns the latent representation of the input signal
