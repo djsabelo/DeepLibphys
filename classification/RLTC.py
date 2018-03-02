@@ -87,7 +87,7 @@ def loss_worker(x_matrix, y_matrix, signal):
 # LOSS FUNCTION
 def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0, overlap=0.33,
                           batch_percentage=0, mini_batch=256, std_tol=10000, X_matrix=None, Y_matrix=None,
-                          min_windows=0.5):
+                          min_windows=100):
 
     if X_matrix is None and Y_matrix is None:
         prepare_data = True
@@ -96,7 +96,10 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
     else:
         prepare_data = False
 
+
+
     sizes = []
+    removex = []
     for signal, model_info, i in zip(signals, signals_models, range(len(signals))):
         signal2model = Signal2Model(model_info.dataset_name, "", signal_dim=model_info.Sd,
                                     hidden_dim=model_info.Hd, batch_size=Total_Windows,
@@ -108,13 +111,19 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
             X_list, Y_list = prepare_test_data(signal, signal2model, overlap=overlap,
                                                batch_percentage=batch_percentage, mean_tol=mean_tol, std_tol=std_tol,
                                                randomize=False)
-            if np.shape(X_list)[0] > min_windows:
+
+            if np.shape(X_list)[0] >= min_windows:
                 X_matrix.append(X_list)
                 Y_matrix.append(Y_list)
                 sizes.append(np.shape(X_list)[0])
+            else:
+                removex.append(i)
         else:
             print(np.shape(X_matrix[i]))
             sizes.append(np.shape(X_matrix[i])[0])
+
+    removex.sort(reverse=True)
+    [signals_models.pop(rem) for rem in removex]
 
     print(np.shape(X_matrix))
 
@@ -131,7 +140,7 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
     windows = np.arange(0, max_windows, mini_batch)
     print(windows)
     N_Models = len(signals_models)
-    N_Signals = len(signals)
+    N_Signals = len(X_matrix)
 
     loss_tensor = np.zeros((N_Models, N_Signals, max_windows))
 
@@ -154,7 +163,7 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
                 y_test = Y_matrix[s, w:w + mini_batch, :]
                 tic = time.time()
                 loss_tensor[m, s, w:w + mini_batch] = np.asarray(model.calculate_mse_vector(x_test, y_test))
-                times.append(tic - time.time())
+                times.append(time.time() - tic)
 
     times = np.array(times)
     print(np.size(loss_tensor, 2))
@@ -164,12 +173,12 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
 
 
 def get_or_save_loss_tensor(full_path, N_Windows=None, W=None, models=None, test_signals=None, force_new=False,
-                            mean_tol=1, overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000,
-                            X_matrix=None, Y_matrix=None):
-    if (not os.path.isfile(full_path) or not os.path.isfile(full_path + '.npz')) or force_new:
+                            mean_tol=0, overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000,
+                            X_matrix=None, Y_matrix=None, min_windows=200):
+    if not os.path.isfile(full_path) or force_new:
         loss_tensor = calculate_loss_tensor(N_Windows, W, models, test_signals, mean_tol=mean_tol, overlap=overlap,
                                             batch_percentage=batch_percentage, mini_batch=mini_batch, std_tol=std_tol,
-                                            X_matrix=X_matrix, Y_matrix=Y_matrix)
+                                            X_matrix=X_matrix, Y_matrix=Y_matrix, min_windows=min_windows)
         np.savez(full_path, loss_tensor=loss_tensor)
         print("Saving to {0}".format(full_path))
     elif os.path.isfile(full_path + '.npz'):
@@ -223,16 +232,21 @@ def filter_loss_tensor(signals, loss_tensor, all_models_info, W, min_windows=512
     model_indexes = []
     list_of_windows_indexes = []
     number_of_windows = []
+    do_it = True
     try:
-        signals[0][0]
-    except TypeError:
-        signals = [signals]
+        signals[0][0][0]
+    except:
+        do_it = False
 
     for i, model_info in enumerate(all_models_info):
         signal2model = Signal2Model(model_info.dataset_name, "", signal_dim=model_info.Sd,
                                     hidden_dim=model_info.Hd, batch_size=np.shape(loss_tensor)[2],
                                     window_size=W)
-        indexes, _, _, _, _ = get_clean_indexes(signals[i], signal2model, overlap=overlap, max_tol=max_tol,
+        if do_it:
+            s = signals[i]
+        else:
+            s = [signals[i]]
+        indexes, _, _, _, _ = get_clean_indexes(s, signal2model, overlap=overlap, max_tol=max_tol,
                                                 std_tol=std_tol, already_cut=already_cut)
         indexes = np.array(indexes)
         if batch_percentage > 0:
@@ -258,7 +272,7 @@ def filter_loss_tensor(signals, loss_tensor, all_models_info, W, min_windows=512
     loss_list = np.zeros((len(model_indexes), len(model_indexes), Total - 1))
     for i, inds in zip(model_indexes, list_of_windows_indexes):
         first_index = 0
-        if len(inds) > Total:# + 20:
+        if len(inds) > Total + 20:
             first_index = np.random.random_integers(0, len(inds) - Total - 20, 1)[0]
         end_index = first_index + Total - 1
 
@@ -287,13 +301,13 @@ def filter_loss_tensor(signals, loss_tensor, all_models_info, W, min_windows=512
         return loss_list, np.array(all_models_info)[np.array(model_indexes)]
     else:
         print("All models were rejected")
-        return []
+        return [], []
 
 
 # IDENTIFICATION
 
 
-def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1):
+def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1, name="", norm=False):
     if batch_size > 1:
         temp_loss_tensor = calculate_batch_min_loss(loss_x_tensor, batch_size)
     else:
@@ -305,7 +319,7 @@ def identify_biosignals(loss_x_tensor, models_info, batch_size=1, thresholds=1):
 
     sinal_predicted_matrix = calculate_prediction_matrix(temp_loss_tensor, thresholds)
 
-    plot_confusion_matrix(sinal_predicted_matrix, signal_labels, model_labels, no_numbers=False, norm=False)
+    plot_confusion_matrix(sinal_predicted_matrix, signal_labels, model_labels, no_numbers=False, norm=True, name=name)
 
 
 def normalize_tensor(loss_tensor, lvl_acceptance=None):
@@ -449,6 +463,12 @@ def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_accep
     thresholds = np.insert(thresholds, [0, len(thresholds)], [first_index, last_index])
     thresholds = np.sort(thresholds)
     n_thresholds = len(thresholds)
+    if n_thresholds > 30000:
+        thresholds = np.unique(np.round(normalize_tensor(loss, lvl_acceptance), decimals-1))
+        thresholds = np.insert(thresholds, [0, len(thresholds)], [first_index, last_index])
+        thresholds = np.sort(thresholds)
+        n_thresholds = len(thresholds)
+
     print("Number of Thresholds: {0}".format(n_thresholds))
     N_Models = np.shape(loss)[0]
     N_Signals = np.shape(loss)[1]

@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # old_signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format(128, 1024)
     signal_directory = 'ECG_BIOMETRY[{0}.{1}]'.format('NEW', window_size)
     old_signal_directory = signal_directory
-    noise_removed_path = "Data/CYBHi/signals.npz"
+    noise_removed_path = "Data/CYBHi/signals_v2.npz"
     # processed_data_path = '../data/processed/biometry_cybhi[256].npz'
     fileDir = "Data/CYBHi"
 

@@ -1,10 +1,10 @@
 
 import csv
 import numpy as np
-from FindNoiseinECG.FeaturesANDClustering.WindowFeature import *
-from FindNoiseinECG.FeaturesANDClustering.MultiDClustering import *
-from FindNoiseinECG.GenerateThings.PlotSaver import *
-from FindNoiseinECG.GenerateThings.PDFATextGen import *
+# from FindNoiseinECG.FeaturesANDClustering.WindowFeature import *
+# from FindNoiseinECG.FeaturesANDClustering.MultiDClustering import *
+# from FindNoiseinECG.GenerateThings.PlotSaver import *
+# from FindNoiseinECG.GenerateThings.PDFATextGen import *
 from DeepLibphys.utils.functions.common import *
 from DeepLibphys.utils.functions.signal2model import *
 
@@ -72,6 +72,49 @@ def process_windows(windows, i):
 
     return processed_signal
 
+def get_signal_structures_from_clusters(infos_train, ): #TODO
+    signals = []
+    for info_train, info_test in zip(infos_train, infos_test, train_names, test_names, train_signals, test_signals):
+        [name, info_clusters_train, reject] = info_train
+        info_clusters_test = info_test[1]
+        train_signal = train_signals[np.where(train_names == name)[0]]
+        test_signal = test_signals[np.where(test_names == name)[0]]
+
+        print(train_signal)
+        if train_signal.size > 0:
+            try:
+                print(name + ": Cluster Train")
+                clusters_train = get_clusters(remove_noise(train_signal[0], moving_avg_window=40, smooth_window=20),
+                                              fs, features_names, win, windows_size, clusters)
+                print(name + ": Cluster Test")
+                clusters_test = get_clusters(remove_noise(test_signal[0], moving_avg_window=40, smooth_window=20),
+                                             fs, features_names, win, windows_size, clusters)
+
+                signals.append(Signal(train_signal, test_signal,
+                                      get_windows_from_clusters(info_clusters_train, clusters_train, train_signal),
+                                      get_windows_from_clusters(info_clusters_test, clusters_test, test_signal), name))
+            except:
+                print("ERROR")
+        else:
+            print("REJECTED - " + name)
+
+
+def get_signal_structures(trains, tests, names):
+    signals = []
+    for name, train, test in zip(names, trains, tests):
+        print(name + ": Cluster Train")
+        clusters_train = remove_cybhi_noise(train)
+            # get_clusters(remove_noise(train_signal[0], moving_avg_window=40, smooth_window=20),
+            #                           fs, features_names, win, windows_size, clusters)
+        print(name + ": Cluster Test")
+        clusters_test = remove_cybhi_noise(test)
+            # get_clusters(remove_noise(test_signal[0], moving_avg_window=40, smooth_window=20),
+            #                          fs, features_names, win, windows_size, clusters)
+
+        signals.append(Signal(train, test, clusters_train, clusters_test, name))
+
+    return signals
+
 
 # Process Clustering
 def get_clusters(signal, fs, features_names, win, windows_size, clusters, plot=False):
@@ -107,104 +150,78 @@ def get_clusters(signal, fs, features_names, win, windows_size, clusters, plot=F
     return y_pred_aux
 
 
-features_names = ["std", "sum", "sum", "AmpDiff"]
-windows_size = [256, 256, 64, 64]
-i = 0
-win = 512
-fs = 250
-clusters = 4
+def process_and_save_files(dir, processed_dir):
+    train_signals, test_signals, names = get_cyb_dataset_raw_files(dataset_dir=dir)
+    np.savez(processed_dir, test_signals=test_signals, names=names, train_signals=train_signals)
 
-# Load Signal and Info
-# fileDir = "Data/CYBHi-short"
-# cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/short-term'
-# full_processed_dir = fileDir + "/cibhi_short_term_signals.npz"
-fileDir = "Data/CYBHi"
-cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/long-term'
-full_processed_dir = fileDir + "/raw_signals.npz"
-train_dates, train_names1, train_signals1, test_dates1, test_names1, test_signals = \
-    get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG)
 
-# np.savez(full_processed_dir, train_dates=train_dates, train_names=train_names,
-#              train_signals=train_signals, test_dates=test_dates,
-#              test_names=test_names, test_signals=test_signals)
+def load_files(full_processed_dir):
+    file = np.load(full_processed_dir)
+    return file["train_signals"], file["test_signals"], file["names"]
 
-# for signal in test_signals:
-#     get_clusters(signal, fs, features_names, win, windows_size, clusters, plot=True)
 
-# infos_train, infos_test = get_info()
-file = np.load(full_processed_dir)
-train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
-    file["train_dates"], file["train_names"], file["train_signals"], file["test_dates"],file["test_names"], \
-    file["test_signals"]
-for sig1, sig2 in zip(train_signals, test_signals):
-    plt.plot(train_signals)
-    plt.show()
+if __name__ == '__main__':
+    features_names = ["std", "sum", "sum", "AmpDiff"]
+    windows_size = [256, 256, 64, 64]
+    i = 0
+    win = 512
+    fs = 250
+    clusters = 4
 
-train_signalz, test_signalz, names = [], [], []
-for train_name, test_name in zip(train_names, test_names):
-    train_signal = train_signals[np.where(train_names == train_name)[0]]
-    test_signal = train_signals[np.where(test_names == train_name)[0]]
-    train_signalz.append(train_signal)
-    test_signalz.append(test_signal)
-    names.append(train_name)
+    # Load Signal and Info
+    # fileDir = "Data/CYBHi-short"
+    # cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/short-term'
+    # full_processed_dir = fileDir + "/cibhi_short_term_signals.npz"
+    fileDir = "Data/CYBHi"
+    cyb_dir = RAW_SIGNAL_DIRECTORY + 'CYBHi/data/long-term'
+    full_processed_dir = fileDir + "/raw_signals_v2.npz"
+    # process_and_save_files(cyb_dir, full_processed_dir)
+    train_signals, test_signals, names = load_files(full_processed_dir)
 
-file = fileDir+"/signals.npz"
+    # for signal in test_signals:
+    #     get_clusters(signal, fs, features_names, win, windows_size, clusters, plot=True)
+    # infos_train, infos_test = get_info()
 
-# np.savez(fileDir+"/signalz.npz", test_signals=test_signalz, train_signals=train_signalz, names=names)
-#
-#
-# signals = []
-# for info_train, info_test in zip(infos_train, infos_test):
-#     [name, info_clusters_train, reject] = info_train[0:-1]
-#     info_clusters_test = info_test[1]
-#     train_signal = train_signals[np.where(train_names == name)[0]]
-#     test_signal = train_signals[np.where(test_names == name)[0]]
-#
-#     if not reject and train_signal.size > 0:
-#         try:
-#             print(name + ": Cluster Train")
-#             clusters_train = get_clusters(remove_noise(train_signal[0], moving_avg_window=40, smooth_window=20),
-#                                           fs, features_names, win, windows_size, clusters)
-#             print(name + ": Cluster Test")
-#             clusters_test = get_clusters(remove_noise(test_signal[0], moving_avg_window=40, smooth_window=20),
-#                                           fs, features_names, win, windows_size, clusters)
-#
-#             signals.append(Signal(train_signal, test_signal,
-#                                   get_windows_from_clusters(info_clusters_train, clusters_train, train_signal),
-#                                   get_windows_from_clusters(info_clusters_test, clusters_test, test_signal), name))
-#         except:
-#             print("ERROR")
-#     else:
-#         print("REJECTED - " + name)
-#
-#
-# print("Saving!! 1st")
-# np.savez(fileDir + "/signals_short.npz", signals=signals)
-# signals = np.load(fileDir + "/signals_short.npz")["signals"]
+    # for sig1, sig2, name in zip(train_signals, test_signals, names):
+    #     plt.figure("train")
+    #     plt.plot(sig1)
+    #     plt.figure("test")
+    #     plt.plot(sig2)
+    #     plt.show()
 
-# for i, signal_data in enumerate(signals):
-#     print("Signal " + signal_data.name)
-#     aux_signal = []
-#     indexes = []
-#     index = 0
-#     w = 0
-#     if type(signal_data.train_windows[0]) is TimeWindow:
-#         windows = [signal_data.train_signal[0][w.start_index:w.end_index] for w in signal_data.train_windows]
-#     else:
-#         windows = signal_data.train_signal
-#
-#     signal_data.processed_train_windows = process_windows(windows, "train")
-#
-#     if type(signal_data.test_windows[0]) is TimeWindow:
-#         windows = [signal_data.test_signal[0][w.start_index:w.end_index] for w in signal_data.test_windows]
-#     else:
-#         windows = signal_data.test_windows
-#
-#     signal_data.processed_test_windows = process_windows(windows, "test")
-#
-#
-# print("Saving!! 2nd")
-# np.savez(fileDir + "/signals.npz", signals=signals)
+    file_name = fileDir + "/pre_set_signals_v2.npz"
+
+    # np.savez(file_name, test_signals=test_signals, train_signals=train_signals, names=names)
+    signals = get_signal_structures(train_signals, test_signals, names)
+
+
+    print("Saving!! 1st")
+    np.savez(fileDir + "/signals_long_v2.npz", signals=signals)
+    signals = np.load(fileDir + "/signals_long_v2.npz")["signals"]
+
+    # for i, signal_data in enumerate(signals):
+    #     print("Signal " + signal_data.name)
+    #     aux_signal = []
+    #     indexes = []
+    #     index = 0
+    #     w = 0
+    #     if type(signal_data.train_windows[0]) is TimeWindow:
+    #         windows = [signal_data.train_signal[0][w.start_index:w.end_index] for w in signal_data.train_windows]
+    #     else:
+    #         windows = signal_data.train_signal
+    #
+    #     signal_data.processed_train_windows = process_windows(windows, "train")
+    #
+    #     if type(signal_data.test_windows[0]) is TimeWindow:
+    #         windows = [signal_data.test_signal[0][w.start_index:w.end_index] for w in signal_data.test_windows]
+    #     else:
+    #         windows = signal_data.test_windows
+    #
+    #     signal_data.processed_test_windows = process_windows(windows, "test")
+
+    #
+    # print("Saving!! 2nd")
+    # np.savez(fileDir + "/signals_v2.npz", signals=signals)
 
 
 
