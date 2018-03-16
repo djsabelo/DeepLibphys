@@ -7,7 +7,7 @@ PATH = "/home/bento/models/"
 
 # Create model
 class Autoencoder:
-    def __init__(self, n_input=1024, n_hidden_1=4, n_hidden_2=1):
+    def __init__(self, n_input=1024, n_hidden_1=256, n_hidden_2=128):
         # n_hidden_1: 1st and 3rd layer number of neurons
         # n_hidden_2: 2nd(Latent) layer number of neurons
         # n_input: length of ECG window
@@ -24,19 +24,16 @@ class Autoencoder:
             'b2': tf.Variable(tf.random_normal([n_hidden_2])),
             'b3': tf.Variable(tf.random_normal([n_hidden_1])),
         }'''
-
-        self.X = tf.placeholder("float", [None, n_input, 1])
-
-        self.build_model()
-        self.predictions = self.layer_4
-        self.session = tf.Session()
+        
         #self.params = [self.weights, self.biases] #b_prime + W.T
 
     def fit(self, x, n_epochs=15, learning_rate=0.001, batch_size=32, display_step=1, save=True, name='1', load=False):
         # tf Graph input
-        #self.graph = tf.Graph()
-        #with self.graph.as_default():
-
+        self.graph = tf.Graph()
+        #x_in = tf.convert_to_tensor(x, np.float32)
+        with self.graph.as_default():
+            X = tf.placeholder("float", [None, x.shape[1], 1])
+            Y = tf.placeholder("float", [None, x.shape[1], 1])
         #Y = tf.placeholder("float", [None, n_classes])
 
 
@@ -48,24 +45,23 @@ class Autoencoder:
         #self.layer_3 =
         #self.layer_4 =
         #x = tf.convert_to_tensor(x, np.float32)
+            self.build_model(x)
 
+        # self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=16,
+        #                                 padding='same')
+        # self.layer_2 = tf.layers.conv1d(self.layer_1, x.shape[1], kernel_size=16, padding='same')
 
-        self.cost = tf.reduce_mean(tf.squared_difference(self.predictions, self.X))
-        self.optimizer = tf.train.AdamOptimizer(learning_rate).minimize(self.cost)
-    # self.layer_1 = tf.layers.conv1d(tf.convert_to_tensor(x, np.float32), self.n_hidden_1, kernel_size=16,
-    #                                 padding='same')
-    # self.layer_2 = tf.layers.conv1d(self.layer_1, x.shape[1], kernel_size=16, padding='same')
+            saver = tf.train.Saver()
+            # Try to plot costs for different learning rates in order to optimize lr!!!
+            self.costs = []
+            # Define loss and optimizer
+            #tf.map_fn(lambda inputs: tf.nn.conv1d(self.layer_4, x))#tf.reduce_mean(tf.squared_difference(self.layer_4, x))
+            optimizer = tf.train.AdamOptimizer(learning_rate).minimize(self.cost)
 
-        saver = tf.train.Saver()
-        # Try to plot costs for different learning rates in order to optimize lr!!!
-        self.costs = []
+            # Initializing the variables
+            init = tf.global_variables_initializer()
 
-        # Define loss and optimizer
-
-        # Initializing the variables
-        init = tf.global_variables_initializer()
-
-        self.sess = tf.Session()#graph=self.graph)
+        self.sess = tf.Session(graph=self.graph)
         self.sess.run(init)
         if load:
             #saver = tf.train.import_meta_graph(PATH + name + '.meta')
@@ -81,7 +77,7 @@ class Autoencoder:
             for i in range(total_batch):
                 batch_x = x[i * batch_size: i * batch_size + batch_size]
                 # Run optimization op (backprop) and cost (to get loss value)
-                _, c = self.sess.run([self.optimizer, self.cost], feed_dict={self.X: batch_x})
+                _, c = self.sess.run([optimizer, self.cost], feed_dict={X: batch_x})
                                                                 #Y: batch_y})
                 # Compute average loss
                 avg_cost += c / total_batch
@@ -100,37 +96,38 @@ class Autoencoder:
             saver.save(self.sess, PATH + name + '.ckpt')
             print("Model saved in file: %s" % PATH + name)
 
-    def build_model(self):
+    def build_model(self, x):
         # with self.graph.as_default():
         #print(tf.convert_to_tensor(x, np.float32))
-        #regularizer = tf.contrib.layers.l2_regularizer(scale=0.01)
-        self.layer_1 = tf.layers.conv1d(self.X, self.n_hidden_1, kernel_size=4,
-                                        padding='same')#, kernel_regularizer=regularizer)
-        # print(self.layer_1)
-        self.pool_1 = tf.layers.max_pooling1d(self.layer_1, 2, strides=2, padding='same')
-        # print(self.pool_1)
-        self.layer_2 = tf.layers.conv1d(self.pool_1, self.n_hidden_2, kernel_size=2, padding='same')#, kernel_regularizer=regularizer)
-        # print(self.layer_2)
-        self.layer_3 = tf.layers.conv1d(self.layer_2, self.n_hidden_1, kernel_size=2, padding='same')#, kernel_regularizer=regularizer)
-        # print(self.layer_3)
+        x_in = tf.convert_to_tensor(x, np.float32)
+        self.layer_1 = tf.layers.conv1d(x_in, self.n_hidden_1, kernel_size=8,
+                                        padding='same')
+        print(self.layer_1)
+        self.pool_1 = tf.layers.average_pooling1d(self.layer_1, 2, strides=2, padding='same')
+        print(self.pool_1)
+        self.layer_2 = tf.layers.conv1d(self.pool_1, self.n_hidden_2, kernel_size=4, padding='same')
+        print(self.layer_2)
+        self.layer_3 = tf.layers.conv1d(self.layer_2, self.n_hidden_1, kernel_size=4, padding='same')
+        print(self.layer_3)
         self.unpool_1 = tf.keras.layers.UpSampling1D(2)(self.layer_3)
-        # print(self.unpool_1)
-        self.layer_4 = tf.layers.conv1d(self.unpool_1, self.X.shape[2], kernel_size=4, padding='same')#, kernel_regularizer=regularizer)
-        #print(self.layer_2)
+        print(self.unpool_1)
+        self.layer_4 = tf.layers.conv1d(self.unpool_1, x.shape[2], kernel_size=8, padding='same')
+        #print(self.layer_4)
+        self.cost = tf.reduce_mean(tf.nn.conv1d(self.layer_4, tf.transpose(x_in, perm=[1, 2, 0]), stride=128, padding='VALID', name='cost'))
+                    #1e10*tf.nn.l2_normalize(tf.reduce_mean(tf.squared_difference(self.layer_4, x_in)))
 
     def get_cost_vector(self):
         return self.sess.run(tf.cast(self.costs, dtype=tf.float32))
     
     def reconstruct(self, x_t):
         # Reconstructs the input signal
-        #with self.graph.as_default():
-        #self.X = tf.placeholder("float", [None,x_t.shape[1],1])
-        #self.build_model()
-        #init = tf.global_variables_initializer()
-        #self.sess = tf.Session()
-        #self.sess.run(init)
-
-        return self.sess.run(self.predictions, feed_dict={self.X: x_t})
+        with self.graph.as_default():
+            X = tf.placeholder("float", [None,x_t.shape[1],1])
+            self.build_model(x_t)
+            init = tf.global_variables_initializer()
+            self.sess = tf.Session()
+            self.sess.run(init)
+        return self.sess.run(self.layer_4, feed_dict={X: x_t})
         
     def get_latent(self, x_t):
         # Returns the latent representation of the input signal

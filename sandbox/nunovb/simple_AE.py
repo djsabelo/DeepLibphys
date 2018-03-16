@@ -105,6 +105,7 @@ class Autoencoder:
         self.layer_4 = tf.matmul(self.layer_3, tf.transpose(self.weights['h1']))
         return self.sess.run(self.layer_4, feed_dict={X: x_t})
 
+
     def get_latent(self, x_t):
         # Returns the latent representation of the input signal
         X = tf.placeholder("float", x_t.shape)

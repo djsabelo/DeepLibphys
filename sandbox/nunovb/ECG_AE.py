@@ -16,7 +16,7 @@ DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/
 def get_files(signals):
     for filename in glob.glob(os.path.join(DATASET_DIRECTORY, '*.mat')):
         print(filename)
-        signals.append(np.array(loadmat(filename)['val'][0][:5000]))
+        signals.append(np.array(loadmat(filename)['val'][0][:50000]))
     return np.array(signals)
 
 # Read all the signals
@@ -26,7 +26,7 @@ def get_files(signals):
 ##np.array([loadmat(get_fantasia_full_paths()[i])['val'][0] for i in range(len(get_fantasia_full_paths()))])
 
 # Read one signal
-sig = np.array(loadmat(os.path.join(DATASET_DIRECTORY, 'f1y01m.mat'))['val'][0][:])
+sig = np.array(loadmat(os.path.join(DATASET_DIRECTORY, 'f1y02m.mat'))['val'][0][:])
 
 # lower bound to ignore artifacts
 for i in range(len(sig)):
@@ -36,9 +36,15 @@ for i in range(len(sig)):
 # Normalize
 #sig = (sig - np.mean(sig)) / np.std(sig)
 x = (sig - np.min(sig))/(np.max(sig) - np.min(sig)) * 2 - 1
-x = x[:35000]
-# print(sig)
-# plt.plot(sig)
+#x = x[:35000]
+#x[810] += 1
+x = segment_signal(x, 1024)[0]
+
+# print(x.shape)
+# plt.plot(x[0])
+# plt.show()
+# print(x.shape)
+# plt.plot(x[1])
 # plt.show()
 # exit()
 
@@ -82,14 +88,17 @@ print("X shape:", x.shape)
 # exit()
 
 #with tf.device('/device:GPU:0'):
-x_train = x[:32768]
+signal_length = x.shape[0]
+
+x_train = x.reshape(-1,x.shape[1],1)
 model = Autoencoder()
-x_train = x_train.reshape(16,2048,1)#1,2048)
+
 print(x_train.shape)
 
-model.fit(x_train, n_epochs=30, learning_rate=0.005, batch_size=8, load=False, save=False, name='1/CAE')
+model.fit(x_train, n_epochs=0, learning_rate=0.008, batch_size=16, load=True, save=False, name='1/CAE4.2.ld')
+# Best: CAE4.2 (256,128);CAE4.2.ld (4,1);
 
-test = x_train.reshape(1,-1,1)
+test = x[670].reshape(1,-1,1)
 
 # Porque é que o sinal fica invertido?
 # Porque não fazer overfit?
@@ -103,7 +112,6 @@ print(pred.shape)
 #np.save('/home/bento/lr.npy', lr)
 #lr = np.load('/home/bento/lr.npy')
 #lr = (np.max(lr) - lr)/(np.max(lr) - np.min(lr))
-
 plt.subplot(211)
 plt.title("Test Signal")
 plt.ylabel('Normalized Voltage')
@@ -113,9 +121,23 @@ plt.subplot(212)
 plt.title("Predicted Signal")
 plt.ylabel('Normalized Voltage')
 plt.xlabel('Samples')
-plt.plot(pred.flatten())
-plt.pause(0.05)
+plt.plot(model.reconstruct(test).flatten())
 plt.show()
+# plt.ion()
+# for i in range(10):
+#     plt.subplot(211)
+#     plt.title("Test Signal")
+#     plt.ylabel('Normalized Voltage')
+#     plt.xlabel('Samples')
+#     plt.plot(test.flatten())
+#     plt.subplot(212)
+#     plt.title("Predicted Signal")
+#     plt.ylabel('Normalized Voltage')
+#     plt.xlabel('Samples')
+#     plt.plot(model.reconstruct(test).flatten())
+#     plt.pause(0.05)
+#     plt.clf()
+    #plt.show()
 
 #np.save('/home/bento/costs3_10.npy', costs)
 #np.save('/home/bento/weights3_10.npy', weights)
