@@ -90,15 +90,17 @@ class LibphysMBGRU(LibphysGRU):
             return printing.Print(name)(j)
 
         prediction = T.argmax(o, axis=1)
-
-        e = ((prediction - y.T) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1])
+        labels = T.eye(T.shape(prediction)[0])[y]
+        # e = ((prediction - y.T) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1])
+        e = T.mean(((prediction - labels) ** 2) / (T.shape(prediction)[0] * T.shape(prediction)[1]), axis=1)
         cost_batch = self.calculate_ce_vector(o, y)
         mse_cost_batch = self.calculate_mean_squared_error_vector(prediction, y)
         # Total cost
         cost = (1 / self.mini_batch_size) * self.calculate_error(o, y)
 
         # Gradients
-        derivatives = self.calculate_gradients(cost, parameters)
+        l2 = T.sqrt(T.sum([T.sum(parameter ** 2) for parameter in parameters]))
+        derivatives = self.calculate_gradients(cost + 0.0001*l2, parameters)
 
         # Assign functions
         self.predict = theano.function([x], [o])
@@ -112,6 +114,8 @@ class LibphysMBGRU(LibphysGRU):
         # SGD parameters
 
         # rmsprop cache updates
+
+
         self.update_RMSPROP(cost, parameters, derivatives, x, y)
 
     def calculate_error(self, O, Y):

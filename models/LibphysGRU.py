@@ -67,6 +67,7 @@ class LibphysGRU:
 
     def calculate_gradients(self, cost, parameters):
         return [T.grad(cost, parameter) for parameter in parameters]
+
         # threshold = 1.1
         # gradients = []
         # for parameter in parameters:
@@ -244,7 +245,7 @@ class LibphysGRU:
                                 validation=validation)
 
     def train_model(self, x_train, y_train, signal2model, track_loss=False, loss_interval=1,
-                    x_validation=None, y_validation=None):
+                    x_validation=None, y_validation=None, dataset=0):
         # print(x_train)
         # print(y_train)
         self.start_time = time.time()
@@ -301,11 +302,16 @@ class LibphysGRU:
                         if count_up_slope >= 5:
                             count_up_slope = 0
                             if np.size(loss) > 10:
-                                print("Min Loss in the last {0} epochs: {1:.3f} < {2:.3f} ?".format
-                                      (10, np.min(loss[-5:]) * 1000, np.min(loss[-10:-5]) * 1000))
-                                if np.min(loss[-5:]) > np.min(loss[-10:-5]):
+                                print("Mean Loss in the last {0} epochs: {1:.3f} < {2:.3f} ?".format
+                                      (10, np.mean(loss[-5:]) * 1000, np.mean(loss[-10:-5]) * 1000))
+                                if np.mean(loss[-5:]) > np.mean(loss[-10:-5]):
                                     self.current_learning_rate = self.current_learning_rate * 3 / 4
                                     print("Adjusting learning rate: " + str(self.current_learning_rate))
+                                #     print("Min Loss in the last {0} epochs: {1:.3f} < {2:.3f} ?".format
+                                #       (10, np.min(loss[-5:]) * 1000, np.min(loss[-10:-5]) * 1000))
+                                # if np.min(loss[-5:]) > np.min(loss[-10:-5]):
+                                #     self.current_learning_rate = self.current_learning_rate * 3 / 4
+                                #     print("Adjusting learning rate: " + str(self.current_learning_rate))
 
                         count_to_break = 0
                     elif relative_loss_gradient > higher_error_threshold:
@@ -363,7 +369,7 @@ class LibphysGRU:
                 sys.stdout.flush()
 
             if epoch > 1 and epoch % signal2model.save_interval == 0:
-                self.save(dir_name=signal2model.signal_directory, file_tag=self.get_file_tag(0, epoch))
+                self.save(dir_name=signal2model.signal_directory, file_tag=self.get_file_tag(dataset, epoch))
 
             if epoch % 10 == 0 or epoch == 0:
                 t2 = time.time()
@@ -435,8 +441,8 @@ class LibphysGRU:
 
         npzfile = np.load(dir_name + file_tag + ".npz")
         E, U, W, V, b, c = [], [], [], [], [], []
-        print("Building model from %s with hidden_dim=%d signal_dim=%d " % (
-            self.model_name, self.hidden_dim, self.signal_dim))
+        print("Building model from {0} with hidden_dim={1}, signal_dim={2}, epoch={3}".format(
+            self.model_name, self.hidden_dim, self.signal_dim, file_tag.split(".")[-1][:-1]))
         try:
             E = npzfile["E"]
             self.E.set_value(E)
@@ -524,6 +530,7 @@ class LibphysGRU:
 
         return 'GRU_{0}[{1}.{2}.{3}.{4}.{5}]'.\
                     format(self.model_name, self.signal_dim, self.hidden_dim, self.bptt_truncate, dataset, epoch)
+
 
     def get_directory_tag(self, dir_name=None, B=128, W=256):
         """

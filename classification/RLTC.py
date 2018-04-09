@@ -85,7 +85,7 @@ def loss_worker(x_matrix, y_matrix, signal):
     return
 
 # LOSS FUNCTION
-def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0, overlap=0.33,
+def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=10000, overlap=0.33,
                           batch_percentage=0, mini_batch=256, std_tol=10000, X_matrix=None, Y_matrix=None,
                           min_windows=100):
 
@@ -173,7 +173,7 @@ def calculate_loss_tensor(Total_Windows, W, signals_models, signals, mean_tol=0,
 
 
 def get_or_save_loss_tensor(full_path, N_Windows=None, W=None, models=None, test_signals=None, force_new=False,
-                            mean_tol=0, overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000,
+                            mean_tol=100000, overlap=0.33, batch_percentage=0, mini_batch=128, std_tol=1000,
                             X_matrix=None, Y_matrix=None, min_windows=200):
     if not os.path.isfile(full_path) or force_new:
         loss_tensor = calculate_loss_tensor(N_Windows, W, models, test_signals, mean_tol=mean_tol, overlap=overlap,
@@ -418,7 +418,7 @@ def process_eers(loss_tensor, W, full_path, name, save_pdf=True, batch_size=120,
 
     if save_pdf:
         labels = ["ECG {0}".format(i) for i in range(1, np.shape(loss_tensor)[0] + 1)]
-        plot_errs(EERs, seconds, labels, directory, name, "Mean EER", savePdf=save_pdf)
+        plot_errs(EERs, seconds, labels, directory, name, "Mean EER", savePdf=save_pdf, plot_mean=True)
 
     return EERs, thresholds, batch_size_array
 
@@ -456,18 +456,19 @@ def calculate_eers(batch_size, loss_tensor, decimals=4):
     return eer, thresholds, candidate_index
 
 
-def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_acceptance=5):
+def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_acceptance=15):
     last_index += 1 * 10 ** (-decimals)
     first_index -= 1 * 10 ** (-decimals)
+    lvl_acceptance = lvl_acceptance if lvl_acceptance < len(loss) else len(loss)-1
     thresholds = np.unique(np.round(normalize_tensor(loss, lvl_acceptance), decimals))
     thresholds = np.insert(thresholds, [0, len(thresholds)], [first_index, last_index])
     thresholds = np.sort(thresholds)
     n_thresholds = len(thresholds)
-    if n_thresholds > 30000:
+    while n_thresholds > 5000:
         thresholds = np.unique(np.round(normalize_tensor(loss, lvl_acceptance), decimals-1))
         thresholds = np.insert(thresholds, [0, len(thresholds)], [first_index, last_index])
-        thresholds = np.sort(thresholds)
         n_thresholds = len(thresholds)
+        thresholds = np.sort(thresholds)
 
     print("Number of Thresholds: {0}".format(n_thresholds))
     N_Models = np.shape(loss)[0]
@@ -479,7 +480,7 @@ def calculate_smart_roc(loss, last_index=1, first_index=0, decimals=4, lvl_accep
     for i, thresh in enumerate(thresholds):
         if i % 100 == 0:
             print(".", end="")
-        score = calculate_variables(loss, thresh)
+        score = calculate_variables(loss, thresh, lvl_acceptance=lvl_acceptance)
         for j in range(N_Models):
             roc[0, i, j] = score[j][0]
             roc[1, i, j] = score[j][1]

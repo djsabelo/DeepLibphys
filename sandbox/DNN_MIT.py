@@ -56,32 +56,52 @@ def get_processing_variables():
 
 
 if __name__ == "__main__":
-    N_Windows = 256
+    N_Windows = None
     isnew = False
     W = 512
+    overlap = 0.11
     signal_dim = 256
     hidden_dim = 256
     mini_batch_size = 256
     batch_size = 256
-    window_size = 1024
+    window_size = 512
     fs = 250
     model_directory = 'ECG_BIOMETRY[MIT]'.format("MIT")
-    loss_filename = VALIDATION_DIRECTORY + "/MIT_LOSS[aLL].npz".format(W)
+    # loss_filename = VALIDATION_DIRECTORY + "/MIT_LOSS[1024].npz".format(W)
     raw_filenames, Ns, core_names, processed_filenames = get_processing_variables()
-
-    z1, z2 = 0, len(raw_filenames)
+    # print(core_names)
+    # z1, z2 = 0, Ns[0]
+    # name = "arr"
+    # z1, z2 = Ns[0], Ns[0] + Ns[1]
+    # name = "sinus"
+    # z1, z2 = Ns[0] + Ns[1], len(core_names)
+    # name = "long"
+    z1, z2 = 0, len(core_names)
+    name = "all"
+    loss_filename = VALIDATION_DIRECTORY + "/MIT_LOSS[" + name + "].npz".format(W)
+    # z = np.array(list(range(14)) + list(range(15, len(raw_filenames)-1)))
+    z = np.arange(z1, z2)
+    # z = np.array([0, 1, 2, 4, 5, 6, 7, 8, 10, 11])
+    trained_epochs_1250 = []
+    trained_epochs_1000 = []
     all_models_info, signals = [], []
-    for i, filename in zip(range(len(processed_filenames))[z1:z2], processed_filenames[z1:z2]):
+    for i, filename in zip(z, processed_filenames[z]):
         signal, core_name = np.load(filename)["signal"], np.load(filename)["core_name"]
         signals.append(extract_test_part([signal])[0])
+        if i in trained_epochs_1250:
+            ds, epoch = 0, 1250
+        elif i in trained_epochs_1000:
+            ds, epoch = 0, 1000
+        else:
+            ds, epoch = -5, -5
         all_models_info.append(ModelInfo(Hd=256, Sd=256, dataset_name=core_name,
-                                     name="MIT " + str(1 + i),
+                                     name="MIT " + str(i), DS=ds, t=epoch,
                                      directory=model_directory))
 
     loss_tensor = RLTC.get_or_save_loss_tensor(loss_filename, N_Windows, W, all_models_info, signals,
-                                               mini_batch=mini_batch_size, force_new=isnew, min_windows=256)
-                                               # mean_tol=0.9, std_tol=0.5)
- 
+                                               mini_batch=mini_batch_size, force_new=isnew, min_windows=256,
+                                               mean_tol=0.5, std_tol=0.5, overlap=overlap)
+
     # svm_signals = signals.append(extr([signal])[0])
 
 
@@ -91,18 +111,32 @@ if __name__ == "__main__":
     #                                    randomize=False)
     # loss_tensor, all_models_info = RLTC.filter_loss_tensor(signals, loss_tensor, all_models_info, W,
     #                                                          min_windows=256, max_tol=0.9, std_tol=0.1)
-    # loss_tensor_ = np.copy(loss_tensor)
+
     # indexes = np.array([1, 7, 11, 12, 20, 30, 32, 33, 42] + list(range(Ns[0] + 2, sum(Ns) + 1))) - 1
     # loss_tensor = loss_tensor[indexes][:, indexes]
-    mask = mask_without_indexes(loss_tensor, [5, 6, 7, 8, 9, 11, 15, 25, 26, 27, 28, 36, 37, 38, 39, 43, 50, 52, 55, 57, 58, 59, 62, 64, 68])
-    # mask = mask_without_indexes(loss_tensor, [7, 8, 9, 11, 25, 26, 27, 28, 36, 37, 38, 50, 51, 55, 57, 58, 59, 62, 64, 68])
+    # mask = mask_without_indexes(loss_tensor, [2, 10, 15, 29, 43, 48, 49, 51, 54, 57, 58, 61, 64, 68])
+    # mask = mask_without_indexes(loss_tensor, [0, 10, 43, 48, 50, 51, 54, 57, 58, 59, 64, 68]) # 93.2% -60 windows
+    # mask = mask_without_indexes(loss_tensor,
+    #                             [0, 6, 8, 11, 12, 36, 37, 38, 41, 51, 55])  # 82.2% - 60 windows 100% - 120 windows
+    # mask = mask_without_indexes(loss_tensor, [0, 2, 6, 8, 10, 11, 12, 15, 29, 33, 36, 37, 38, 41, 48, 50, 51, 54, 55,
+    #                                           57, 58, 59, 64, 68]) #99.3% - 60 windows 100% - 120 windnows
+    # 0, 2, 6, 8, 10, 11, 12, 15, 29, 33, 36, 37, 38, 41, 48, 50, 51, 54, 55, 57, 58, 59, 64, 68
+    #    2,       10,         15, 29, 33,                 48, 50,     54,     57, 58, 59, 64, 68
+    # 0,    6, 8,    11, 12,              36, 37, 38, 41,         51,     55
+
+    # mask = mask_without_indexes(loss_tensor, [10, 11, 29, 33] + [51, 55, 58, 59, 64 ]) #ALL
+    # mask = mask_without_indexes(loss_tensor, [51, 55, 58, 59]) #SINUS
+    # mask = mask_without_indexes(loss_tensor, [10, 11, 29, 33]) #ARRYTHMIA
+    mask = mask_without_indexes(loss_tensor, [29])
     loss_tensor = loss_tensor[mask][:, mask]
     all_models_info = np.array(all_models_info)[mask]
-    for i in [60]:
+    loss_tensor_ = np.copy(loss_tensor)
+    for i in [120*3]:
         RLTC.identify_biosignals(loss_tensor, all_models_info, batch_size=i)
-
-    # EERs, thresholds, batch_size_array = RLTC.process_eers(loss_tensor_, W, VALIDATION_DIRECTORY, "MIT_EER", save_pdf=True,
-    #                                      batch_size=120, fs=250, decimals=4, force_new=False)
+    name += "[-29]"
+    EERs, thresholds, batch_size_array = RLTC.process_eers(loss_tensor_, W, VALIDATION_DIRECTORY, "_MIT_" + name +
+                                                           "", save_pdf=True, batch_size=120, fs=250,
+                                                           decimals=4, force_new=True)
 
 
 

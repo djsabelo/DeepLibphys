@@ -1221,16 +1221,17 @@ def prepare_cybhi_train_test_variables(loss_name, trained_model_directory):
 
 if __name__ == "__main__":
     signal_dim = 256
-    isnew = False
+    isnew = True
     hidden_dim = 256
     mini_batch_size = 256
-    batch_size = 32
+    batch_size = 256
     fs = 250
     window_size = 512
     W = 512
-    bs = 60
+    bs = 120
+    overlap = 0.05
     all_EERs = []
-    seconds = (W / fs) + (np.arange(1, bs) * W * 0.11) / fs
+    seconds = (W / fs) + (np.arange(1, bs) * W * overlap) / fs
     loss_tensor = []
     mean_EERs = []
     limit = 0
@@ -1238,36 +1239,41 @@ if __name__ == "__main__":
     # prefix = "_LONG_{0}".format(limit)
     prefix = "_LONG_{0}".format(limit)
 
-    # trained_model_directory = 'ECG_BIOMETRY[32.512.4]'.format(batch_size, window_size)
-    trained_model_directory = 'ECG_BIOMETRY[64.512.8]'.format(batch_size, window_size)
+    trained_model_directory = 'ECG_BIOMETRY[128.1024]'.format(batch_size, window_size)
+    # trained_model_directory = 'ECG_BIOMETRY[CYBHi]'.format(batch_size, window_size)
 
     pre = "[NO FILTER]"
-    loss_name = "M1_vs_M1"
+    loss_name = "M2_vs_M2"
     print(loss_name)
-    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}[10-19]".format(pre, loss_name)
+    full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}[_]".format(pre, loss_name)
     # full_path = VALIDATION_DIRECTORY + "/LOSS_CYBHi_{0}_{1}".format(pre, loss_name)
 
     test_signals, models_info = prepare_cybhi_train_test_variables(loss_name, trained_model_directory)
 
-    test_signals = test_signals[0:10]
-    models_info = models_info[0:10]
+    test_signals = test_signals
+    models_info = models_info
     loss_tensor = RLTC.get_or_save_loss_tensor(full_path + ".npz", None, W=window_size, models=models_info,
                                                test_signals=test_signals, force_new=isnew, min_windows=min_windows,
-                                               overlap=0.11, batch_percentage=0, mini_batch=mini_batch_size)
+                                               overlap=overlap, batch_percentage=0, mini_batch=mini_batch_size)
 
-    # loss_tensor, models_info = RLTC.filter_loss_tensor(test_signals, loss_tensor, models_info, min_windows=100, overlap=0.11,
-    #                                       max_tol=0.8, std_tol=0.1, W=W)
+    # loss_tensor, models_info = RLTC.filter_loss_tensor(test_signals, loss_tensor, models_info, min_windows=100,
+    #                                                    overlap=overlap, max_tol=0.8, std_tol=0.1, W=W)
 
-    mask = mask_without_indexes(loss_tensor, [0, 1])#, 49, 51, 57, 63])
-    loss_tensor = loss_tensor[mask][:, mask]
-    models_info = np.array(models_info)[mask]
+    # mask = mask_without_indexes(loss_tensor, [0, 2, 3, 10, 11, 12, 14, 15, 16, 18])
+    # indexes_to_mask = [30, 32, 33, 34, 40, 41, 42, 43, 44, 45, 46, 48, 53, 54, 58, 60, 61, 62]
+    # indexes_to_mask = [0, 1, 2, 3, 8, 9, 10, 12, 16, 17, 19, 20, 22, 26, 27, 28] + indexes_to_mask
+    # indexes_to_mask =[9, 28] really bad ones
+
+    # mask = mask_without_indexes(loss_tensor, [1])
+    # loss_tensor = loss_tensor[mask][:, mask]
+    # models_info = np.array(models_info)[mask]
 
     # loss_tensor = (loss_tensor ) / np.max(loss_tensor, 0)
-    for i in [1, 10, 30, 60]:
+    for i in [60]:
         RLTC.identify_biosignals(loss_tensor, models_info, batch_size=i)
 
-    EERs, thresholds = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
-                                         batch_size=60, decimals=5)
+    EERs = RLTC.process_eers(loss_tensor, W, VALIDATION_DIRECTORY, pre + " " + loss_name, True,
+                             batch_size=120, decimals=5)
 
 
     # good_indices = np.where(size > limit)[0]

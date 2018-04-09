@@ -1,0 +1,51 @@
+Statistics: 
+ Mean time: -0.9419185647509538; 
+ Std time: 0.10948410339594909; Max time: -0.4651052951812744; Min Time: -2.716221332550049
+Saving to ../data/validation/CYBHI/LOSS_CYBHi_[NO FILTER]_M1_vs_M1.npz
+
+Statistics: 
+ Mean time: -1.013485353941084; 
+ Std time: 0.09572956798429276; Max time: -0.5656695365905762; Min Time: -1.7664470672607422
+Saving to ../data/validation/CYBHI/LOSS_CYBHi_[NO FILTER]_M1_vs_M2.npz
+
+Statistics: 
+ Mean time: -1.9157775040409581; 
+ Std time: 0.5500523075577861; Max time: -1.1581206321716309; Min Time: -5.618531227111816
+Saving to ../data/validation/CYBHI/LOSS_CYBHi_[NO FILTER]_M2_vs_M2.npz
+
+
+
+
+LOSS_CYBHi_[NO FILTER]_M1_vs_M2
+ Mean time: -0.4352239934775956; 
+ Std time: 0.055063636694261515; Max time: -0.21808862686157227; Min Time: -1.1496036052703857
+
+
+
+Statistics: 
+ Mean time: -0.3741812940083521; 
+ Std time: 0.08389456599482085; Max time: -0.1341547966003418; Min Time: -1.0186398029327393
+Saving to ../data/validation/CYBHI/LOSS_CYBHi_[NO FILTER]_M1_vs_M1.npz
+
+
+Statistics: 
+ Mean time: -0.5037381077742877; 
+ Std time: 0.04645977613716958; Max time: -0.21368861198425293; Min Time: -1.3702504634857178
+Saving to ../data/validation/Dec_MIT/MIT_LOSS[256].npz
+
+Statistics: 
+ Mean time: -2.0057343026882775; 
+ Std time: 0.1873481774683952; Max time: -0.7695827484130859; Min Time: -3.1361684799194336
+Saving to ../data/validation/Dec_MIT/MIT_LOSS[1024].npz
+
+
+Statistics: 
+ Mean time: -3.2410897153367597; 
+ Std time: 0.4290939202673772; Max time: -2.3092098236083984; Min Time: -5.780043125152588
+Saving to ../data/validation/Jan_2018/LOSS_TENSOR_[1024].npz
+
+
+Statistics: 
+ Mean time: -0.7756159263902477; 
+ Std time: 0.14692888229677706; Max time: -0.3624134063720703; Min Time: -3.311802625656128
+Saving to ../data/validation/Jan_2018/LOSS_TENSOR_[256].npz

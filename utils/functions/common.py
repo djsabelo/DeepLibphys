@@ -141,7 +141,7 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
-def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60, window_rmstd=2000, confidence=0.0001):
+def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=250*4, window_rmstd=250, confidence=0.0001):
     # plt.figure(0)
     # plt.plot(signal[0])
 
@@ -163,14 +163,14 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60,
         signalx = np.array([smooth(signal_, window_smooth) for signal_ in signal])
         # plt.plot(signalx[0])
         # plt.show()
-        return np.array([descretitize_signal(signal_, interval_size, confidence) for signal_ in signalx])
+        return np.array([quantitize_signal(signal_, interval_size, confidence) for signal_ in signalx])
     else:
         signal = smooth(signal, window_smooth)
         # plt.figure()
         # plt.plot(signal[1000:2000])
         # plt.show()
 
-        return descretitize_signal(signal, interval_size, confidence)
+        return quantitize_signal(signal, interval_size, confidence)
 
 def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, window_smooth=20, window_rmstd=1000,
                          window_rmavg=60, confidence=0.0001):
@@ -213,9 +213,9 @@ def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, w
     #
     # plt.show()
     # return np.array(y)
-    return np.array([descretitize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
+    return np.array([quantitize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
 
-def descretitize_signal(signal, interval_size, confidence = 0.001):
+def quantitize_signal(signal, interval_size, confidence = 0.001):
 
     signal = truncate_signal(signal, confidence)
     signal -= np.min(signal)           # removed the minimum value
@@ -255,21 +255,8 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
     return signal.astype(int)                               # insert signal into an array of signals
 
 def remove_moving_avg(signal, window_size=60):
-    signalx = np.zeros_like(signal)
-
-    for i in range(np.shape(signal)[-1]):
-        n = [int(i - window_size/2), int(window_size/2 + i)]
-
-        if n[1] > np.shape(signal)[-1]:
-            n[1] -= np.shape(signal)[-1]
-
-        if np.shape(signal[n[0]:n[1]])[-1] > 0:
-            if len(np.shape(signal)) == 1:
-                signalx[i] = (signal[i] - np.mean(signal[n[0]:n[1]], axis=0))
-            else:
-                signalx[:, i] = (signal[:, i] - np.mean(signal[:, n[0]:n[1]], axis=0))
-
-    return signalx
+    signal -= smooth(signal, window_size)
+    return signal
 
 
 def moving_avg(signal, window_size=60):
@@ -328,7 +315,7 @@ def moving_min(signal, window_size=60):
 
     returned = pool.starmap(moving_mini, zip(windows))
     pool.close()
-    return returned
+    return np.array(returned)
 
 
 def moving_mini(window):
@@ -1423,8 +1410,8 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
             for j in range(len(confusion_matrix[0,:])):
                 value = int(confusion_matrix[i, j])
                 value_ = str(int(confusion_matrix[i, j]))
-                color_index = value/np.max(confusion_matrix)
-                if color_index>0.35 or color_index>0.65:
+                color_index = value / np.sum(confusion_matrix[0])
+                if color_index > 0.35 or color_index > 0.65:
                     color_index = 1.0
 
                 if norm:
@@ -1445,6 +1432,19 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     ax.xaxis.set_label_position('top')
     ax.set_xticklabels(labels_pred, rotation=90, **kwargs)
     return ax
+
+def get_file_tag(core_name, dataset=-5, epoch=-5):
+    """
+    Gives a standard name for the file, depending on the #dataset and #epoch
+    :param dataset: - int - dataset number
+                    (-1 if havent start training, -5 when the last batch training condition was met)
+    :param epoch: - int - the last epoch number the dataset was trained
+                    (-1 if havent start training, -5 when the training condition was met)
+    :return: file_tag composed as GRU_SIGNALNAME[SD.HD.BTTT.DATASET.EPOCH] -> example GRU_ecg[64.16.0.-5]
+    """
+
+    return 'GRU_{0}[{1}.{2}.{3}.{4}.{5}].npz'.\
+                format(core_name, 256, 256, -1, dataset, epoch)
 
 
 def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#E84150", "#FFB36D"], rejection = None):
@@ -1496,12 +1496,18 @@ def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#
 def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_mean=True):
     cmap = mpl.cm.get_cmap('rainbow')
     fig = plt.figure("fig", figsize=(900 / 96, 600 / 96), dpi=96)
-    for i, EER in zip(range(len(EERs)), EERs):
+    # savePdf = False
+    # indexes = [29, 51, 55, 58, 59, 64]
+    # indexes = [51, 58, 64]
+    # EERs = EERs[indexes]
+    indexes = np.arange(len(EERs))
+    for i, EER in zip(enumerate(indexes), EERs):
+        z, zi = i
         alph = 0.1
         if not plot_mean:
             alph = 0.6
-        plt.plot(time, EER, '.', color=cmap(i / len(EERs)), alpha=alph)
-        plt.plot(time, EER, color=cmap(i / len(EERs)), alpha=alph, label=labels[i])
+        plt.plot(time, EER, '.', color=cmap(z / len(EERs)), alpha=alph)
+        plt.plot(time, EER, color=cmap(z / len(EERs)), alpha=alph, label=labels[zi])
 
     font_s = 3
     if len(EERs) <= 40:
@@ -1809,18 +1815,34 @@ def randomize_batch(x_windows, y_windows, batch_size=None):
     else:
         return x_windows[:, window_indexes[0:batch_size], :], y_windows[:, window_indexes[0:batch_size], :]
 
-
-def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=0.6, std_tol=100,
+def prepare_for_RR_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=10000, std_tol=100,
                       randomize=True):
-
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
 
-    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
-                                                                     max_tol=mean_tol, std_tol=std_tol)
+    windows = [np.asarray(sig.decimate(window, 4), np.int16) for window in windows]
+    windows = [quantitize_signal(windows[0], signal2model.signal_dim)]
+    rrs = [np.where(np.bitwise_and(window[1:-1] > np.max(windows[0][1:-1])*0.8, np.diff(window[0:-1]) * np.diff(windows[0][1:])
+                          <= 0))[0] for window in windows]
 
-    x__matrix = np.array(x__matrix)
-    y__matrix = np.array(y__matrix)
+    RRs = np.zeros_like(windows[0])
+    RRs[rrs[0][1:]+1] = np.diff(rrs[0])
+    RRs[RRs>=signal2model.signal_dim-1] = signal2model.signal_dim-1
+    # plt.plot(windows[0][1:])
+    # plt.plot(RRs)
+    # plt.show()
+    windows[0] = windows[0][1:]
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+
+    indexes, xRR, yRR, reject, total = get_clean_indexes([RRs], signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+    x__matrix = np.array(x__matrix[1:], dtype=np.int16)
+    y__matrix = np.array(y__matrix[1:], dtype=np.int16)
+    xRR = np.array(xRR[1:], dtype=np.int16)
+    yRR = np.array(yRR[1:], dtype=np.int16)
+
+    # yRRs =
     print(len(x__matrix))
 
     end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
@@ -1835,17 +1857,199 @@ def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, m
     else:
         indexes = end_train_index + np.arange(int(batch_size))
 
+    return [x__matrix[indexes], y__matrix[indexes]], [xRR[indexes], yRR[indexes]]
 
+def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=10000, std_tol=100,
+                      randomize=True):
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    if randomize:
+        indexes = end_train_index + np.random.permutation(int(batch_size))
+    else:
+        indexes = end_train_index + np.arange(int(batch_size))
+
+    # plt.ion()
+    # for x in x__matrix[indexes]:
+    #     plt.plot(x)
+    #     plt.pause(0.1)
+    #     plt.clf()
+    # plt.close()
+    return x__matrix[indexes], y__matrix[indexes]
+
+def get_feedback_index(window):
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
+    l, = plt.plot(window, lw=2)
+
+    class BooleanSwitcher(object):
+        chosen = None
+
+        def yes(self, event):
+            self.chosen = True
+            plt.close()
+
+        def no(self, event):
+            self.chosen = False
+            plt.close()
+
+    callback = BooleanSwitcher()
+    axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+    axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+    by = Button(axnext, 'Yes')
+    by.on_clicked(callback.yes)
+    bn = Button(axprev, 'No')
+    bn.on_clicked(callback.no)
+    plt.show()
+
+    return callback.chosen
+
+
+
+
+from matplotlib.widgets import CheckButtons
+
+
+def get_feedback_indexes(windows, rows=5):
+    fig, ax = plt.subplots()
+    fig.set_size_inches(18.5, 10.5)
+    # plt.subplots_adjust(left=0.2)
+    l = []
+    for row, window in zip(range(rows), windows):
+        plt.subplot(rows, 1, row+1)
+        plt.ylim([0, 256])
+        l.append(plt.plot(window, lw=2))
+    rax = plt.axes([0.9, 0.09, 0.2, 0.85])
+    check = CheckButtons(rax, [str(i) for i in range(rows)], [True for i in range(rows)] )
+    check.rectangles
+    class BooleanSwitchers(object):
+        chosen = None
+        checked = []
+
+        def __init__(self, rows):
+            self.checked = [True for i in range(rows)]
+
+        def ok(self, event):
+            plt.close()
+
+        def func(self, label):
+            self.checked[int(label)-1] = not int(label)
+
+    callback = BooleanSwitchers(rows)
+    #left, bottom, width, high
+    axprev = plt.axes([0.9, 0.01, 0.05, 0.05])
+    bn = Button(axprev, 'Ok')
+    check.on_clicked(callback.func)
+    bn.on_clicked(callback.ok)
+    plt.show()
+
+    return callback.checked
+
+
+def prepare_several_special_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=100, std_tol=100,
+                      show=True):
+
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol, show=show)
+
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    indexes = []
+    counter = 0
+    rows = 10
+    random_indexes = np.random.permutation(len(x__matrix))
+    while len(indexes) < batch_size and counter < len(random_indexes)-rows:
+        windows = x__matrix[random_indexes[counter:counter+rows]]
+        # chosen_indexes = get_feedback_indexes(windows, rows)
+        chosen_indexes = np.array([True for i in range(len(windows))])
+        if any(chosen_indexes):
+            counters = np.arange(counter, counter+rows)[np.array(chosen_indexes)]
+            print(chosen_indexes)
+            indexes += random_indexes[counters].tolist()
+
+        print("# of Windows: {0}".format(len(indexes)))
+        counter += rows
+
+    batch_size = batch_size \
+        if (batch_size < len(indexes)) \
+        else len(indexes) - (len(indexes) % signal2model.mini_batch_size)
+
+    indexes = np.array(indexes)[:batch_size]
+    return x__matrix[indexes], y__matrix[indexes]
+
+def prepare_special_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=100, std_tol=100,
+                      show=True):
+
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol, show=show)
+
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    indexes = []
+    counter = 0
+    random_indexes = np.random.permutation(len(x__matrix))
+    while len(indexes) < batch_size or counter == len(random_indexes)-1:
+        window = x__matrix[random_indexes[counter]]
+        is_chosen_index = get_feedback_index(window)
+        if is_chosen_index:
+            indexes.append(random_indexes[counter])
+
+        print("# of Windows: {0}".format(len(indexes)))
+        counter += 1
+
+    indexes = np.array(indexes)
     return x__matrix[indexes], y__matrix[indexes]
 
 
-def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10000000, already_cut=False):
+def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, mean_tol=100000, std_tol=10000000,
+                      already_cut=False, show=False):
     x__matrix, y__matrix = [], []
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
     reject = 0
     total = 0
     windows_standard_deviation = []
+    windows_abs_mean = []
     ws = []
     windows_amplitude = []
     small_windows = []
@@ -1855,21 +2059,40 @@ def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10
             small_windows.append(window)
             windows_standard_deviation.append(np.std(small_windows[-1]))
             windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+            windows_abs_mean.append(np.sum(abs(small_windows[-1]) - np.min(small_windows[-1])))
             indexes.append(s_w)
         elif len(window) > window_size + 1:
             for s_w in range(0, len(window) - window_size - 1, int(window_size * overlap)):
                 small_windows.append(np.round(window[s_w:s_w + window_size]))
                 windows_standard_deviation.append(np.std(small_windows[-1]))
                 windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+                windows_abs_mean.append(np.sum(abs(small_windows[-1]) - np.min(small_windows[-1])))
                 indexes.append(s_w)
 
     stw_median = np.median(windows_standard_deviation)
-    limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    abs_mean_median = np.median(windows_abs_mean)
+
+    std_limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    abs_mean_limits = [abs_mean_median - mean_tol * abs_mean_median, abs_mean_median + mean_tol * abs_mean_median]
+    if show:
+        plt.plot(np.arange(len(windows_abs_mean)), windows_abs_mean, color="#FFA07A")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_median, color="#CD5C5C")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_limits[0], color="#800000")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_limits[1], color="#800000")
+        # plt.show()
+        plt.figure()
+        plt.plot(windows_standard_deviation, color="#66CDAA")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*stw_median, color="#00CED1")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*std_limits[0], color="#008080")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*std_limits[1], color="#008080")
+        plt.show()
     rejected_windows = []
     aproved_indexes = []
     index = 0
-    for amp, stw, window, i in zip(windows_amplitude, windows_standard_deviation, small_windows, indexes):
-        if (amp > max_tol * signal2model.signal_dim) and (limits[0] <= stw <= limits[1]):
+    for abm, amp, stw, window, i in zip(windows_abs_mean, windows_amplitude, windows_standard_deviation, small_windows, indexes):
+        if (amp > max_tol * signal2model.signal_dim) and \
+                (std_limits[0] <= stw <= std_limits[1]) and \
+                (abs_mean_limits[0] <= abm <= abs_mean_limits[1]):
             aproved_indexes.append(index)
             x__matrix.append(window[:-1])
             y__matrix.append(window[1:])
