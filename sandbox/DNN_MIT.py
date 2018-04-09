@@ -81,7 +81,7 @@ if __name__ == "__main__":
     loss_tensor = RLTC.get_or_save_loss_tensor(loss_filename, N_Windows, W, all_models_info, signals,
                                                mini_batch=mini_batch_size, force_new=isnew, min_windows=256)
                                                # mean_tol=0.9, std_tol=0.5)
-
+ 
     # svm_signals = signals.append(extr([signal])[0])
 
 
