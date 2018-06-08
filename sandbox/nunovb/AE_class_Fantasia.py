@@ -1,5 +1,4 @@
 from DeepLibphys.utils.functions.common import get_fantasia_full_paths, remove_noise, segment_signal
-from DeepLibphys.sandbox.ConvNets import CNN
 import os
 from DeepLibphys.sandbox.nunovb.conv_AE_graph import Autoencoder
 import numpy as np
@@ -13,6 +12,7 @@ from cv2.cv2 import resize
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.linear_model import LogisticRegression
+from tensorflow.contrib.rnn import NASCell
 from keras.models import Sequential
 from keras.layers import Dense, Conv2D, ConvLSTM2D, Dropout, Activation, BatchNormalization, MaxPooling2D, Flatten
 from keras.callbacks import ReduceLROnPlateau
@@ -87,7 +87,7 @@ MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/De
 os.chdir(MODEL_DIRECTORY)
 
 #
-n_samples = 10000 # number of samples from each subject/person.  10000 for ECG-ID ;  9000000 for Fantasia
+n_samples = 5000 # number of samples from each subject/person.  10000 for ECG-ID ;  9000000 for Fantasia
 
 signals_train, signals_test, labels_train, labels_test = get_signals(n_samples)
 # signals_train, signals_test, labels_train, labels_test = convertw(returned, 0),\
@@ -126,21 +126,21 @@ print(labels_test.shape)
 
 model = Autoencoder()
 
-model.fit(signals_train, n_epochs=5, learning_rate=0.003, batch_size=64, load=False, save=True, name='1/CAE_class')
-# Accuracy: 0.05027932960893855
+model.fit(signals_train, n_epochs=1, learning_rate=0.003, batch_size=64, load=False, save=True, name='1/CAE_class')
 # Best: CAE4.2 (256,128);CAE4.2.ld (4,1);
 
 # Porque é que o sinal fica invertido?
 # Porque não fazer overfit?
 
 signals_train = model.get_latent(signals_train)
-print(signals_train.shape)
+print("S train:",signals_train.shape)
 
 # print(preds.shape)
 signals_test = model.get_latent(signals_test)
+print("S_test:",signals_test.shape)
 
-signals_train = signals_train.reshape((-1, 512 * signals_train.shape[2]))
-signals_test = signals_test.reshape((-1, 512 * signals_test.shape[2]))
+signals_train = signals_train.reshape((-1, signals_train.shape[1] * signals_train.shape[2]))
+signals_test = signals_test.reshape((-1, signals_test.shape[1]))
 print(signals_train.shape)
 
 model = LogisticRegression()

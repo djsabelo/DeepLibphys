@@ -91,20 +91,21 @@ print("X shape:", x.shape)
 signal_length = x.shape[0]
 
 x_train = x.reshape(-1,x.shape[1],1)
-model = Autoencoder()
+model = Autoencoder(batch_size=64)
 
 print(x_train.shape)
 
-model.fit(x_train, n_epochs=0, learning_rate=0.008, batch_size=16, load=True, save=False, name='1/CAE4.2.ld')
-# Best: CAE4.2 (256,128);CAE4.2.ld (4,1);
-
-test = x[670].reshape(1,-1,1)
-
+model.fit(x_train[:1700], n_epochs=5, learning_rate=0.003, batch_size=64, load=False, save=True, name='1/CAE')
+# CAE4.2; CAE4.2.ld (4,1);
+# CAE2 Epoch: 0045 cost=0.006262855 Time: 2.792405366897583 s -> Bad. UP interpolation impl
+# CAE4.2 cost=0.001755339 Time: 0.48259925842285156 s -> Good. Keras upsampling
+test = x[900].reshape(1,x.shape[1],1)
+print(test.shape)
 # Porque é que o sinal fica invertido?
 # Porque não fazer overfit?
 
 pred = model.reconstruct(test)
-print(pred.shape)
+#print(pred.shape)
 
 #np.save('/home/bento/pred.npy', pred)
 #pred = np.load('/home/bento/pred.npy')
@@ -112,16 +113,21 @@ print(pred.shape)
 #np.save('/home/bento/lr.npy', lr)
 #lr = np.load('/home/bento/lr.npy')
 #lr = (np.max(lr) - lr)/(np.max(lr) - np.min(lr))
-plt.subplot(211)
+plt.subplot(311)
 plt.title("Test Signal")
 plt.ylabel('Normalized Voltage')
 plt.xlabel('Samples')
 plt.plot(test.flatten())
-plt.subplot(212)
+plt.subplot(312)
 plt.title("Predicted Signal")
 plt.ylabel('Normalized Voltage')
 plt.xlabel('Samples')
 plt.plot(model.reconstruct(test).flatten())
+plt.subplot(313)
+plt.title("UP layer")
+plt.ylabel('Normalized Voltage')
+plt.xlabel('Samples')
+plt.plot(model.get_unpool(test).flatten())
 plt.show()
 # plt.ion()
 # for i in range(10):
