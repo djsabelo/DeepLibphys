@@ -14,18 +14,21 @@ def binary_activation(x):
 
     return out
 
-total_sequence = 200
-timesteps = 20
-n_classes = 9
+timesteps = 500
+n_classes = 1
 batch_size = 16
 samples = 1000
 # sequences = np.array([np.array([np.array([np.float32(np.random.randint(0, 15)) for i in range(10)] for i in range(15)])) for i in range(100)]))
-sequences = np.array([np.array([np.float32(np.random.randint(0, 5)) for i in range(total_sequence)]) for i in range(samples)])#.reshape(samples, timesteps, 1)
+sequences = np.array([np.array([np.float32(np.random.random_integers(0, 50)) for i in range(timesteps)]) for i in range(samples)])#.reshape(samples, timesteps, 1)
 #print(sequences[:5])
 #exit()
+max_s = np.max(sequences)
+sequences /= max_s
 #    for i in range(N_Windows):
 #print(np.array([np.sum(seq[:3]) for seq in sequences]).shape)
-labels = LabelBinarizer().fit_transform(np.array([np.sum(seq[3:5]) for seq in sequences]))
+labels = np.array([np.sum(seq[:timesteps // 10:4]) for seq in sequences])#LabelBinarizer().fit_transform(np.array([np.sum(seq[3:5]) for seq in sequences]))
+max_l = np.max(labels)
+labels /= max_l
 
 # sequences = np.array([np.array(LabelBinarizer().fit_transform([np.float32(np.random.randint(0, 15)) for i in range(150)])) for i in range(100)])
 #labels = LabelBinarizer().fit_transform([np.mean(seq[:3]) for seq in sequences])
@@ -34,7 +37,7 @@ print(sequences.shape)
 train = sequences[800:]
 test = sequences[-200:]
 y_train = labels[800:]
-y_test = np.repeat(labels[-200:], len(train)/timesteps).reshape(-1,9)
+y_test = labels[-200:]
 # print(sequences.dtype)
 #exit()
 #sequences = LabelBinarizer().fit_transform(sequences)
@@ -56,7 +59,7 @@ a = tf.layers.dense(l1a, n_features, tf.nn.softmax)
 l1f = tf.layers.dense(x, n_units, tf.nn.relu)
 z = tf.layers.dense(l1f, n_features)
 
-glimpse = tf.multiply(a, z)#z
+glimpse = z#tf.multiply(a, z)#z
 
 # z = []
 # for i in range(n_heads):
@@ -71,7 +74,7 @@ prediction = tf.layers.dense(l2, n_classes) # tf.concat(z, axis=1)
 
 #prediction = tf.nn.softmax(tf.matmul(outputs[:,-1], out_weights) + out_bias)
 
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
+loss = tf.reduce_mean(tf.squared_difference(prediction,y))#tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
 
 optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 
@@ -91,14 +94,14 @@ for epoch in range(100):
     start = time.time()
     # Loop over all batches
     for i in range(total_batch):
-        batch_x = train[i * batch_size: i * batch_size + batch_size].reshape(-1,timesteps)
-        batch_y = np.repeat(y_train[i * batch_size: i * batch_size + batch_size], len(train)/timesteps).reshape(-1,9)
+        batch_x = train[i * batch_size: i * batch_size + batch_size]
+        batch_y = y_train[i * batch_size: i * batch_size + batch_size]
         # Run optimization op (backprop) and cost (to get loss value)
-        _, c = sess.run([optimizer, loss], feed_dict={x: batch_x, y: batch_y})#self.layer_3,self.unpool_1,
+        _, c = sess.run([optimizer, loss], feed_dict={x: batch_x, y: batch_y.reshape(-1,1)})#self.layer_3,self.unpool_1,
         # if epoch % display_step == 0:
         avg_cost += c / total_batch
     print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_cost), "Time:", time.time() - start, "s")
-preds = np.array(sess.run([prediction], feed_dict={x: test.reshape(-1,timesteps)})).reshape(-1,9)
-print(preds[:10])
-print(y_test[:10])
-print("Accuracy:", accuracy_score(np.argmax(y_test, 1),np.argmax(preds, 1)))
+preds = np.array(sess.run([prediction], feed_dict={x: test}))[0]#.reshape(-1,1)
+print(preds[:10] * max_l * max_s)
+print(y_test[:10] * max_l * max_s)
+print("MSE:",np.mean((preds-y_test)**2))#""Accuracy:", accuracy_score(np.argmax(y_test, 1),np.argmax(preds, 1)))
