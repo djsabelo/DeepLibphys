@@ -233,7 +233,7 @@ def get_normed_weights(shape, axis=None, scope=None, return_all=True,
             return w, g, v
     return w
 
-#timesteps = 20
+timesteps = 20
 total_time = 600
 n_classes = 1
 batch_size = 16
@@ -245,21 +245,32 @@ print(X.shape)
 print(y.shape)
 
 train = X[800:]
-test = X[-200:].reshape(-1,2)
+test = X[-200:]
 y_train = y[800:]
 y_test = y[-200:]
 # print(sequences.dtype)
 #exit()
 #sequences = LabelBinarizer().fit_transform(sequences)
 n_units = 32
+mem_size = 32
 #n_features = 10
 #n_heads = 3
 
-x = tf.placeholder(tf.float32, [None, n_features]) # [timesteps, n_input]
+x = tf.placeholder(tf.float32, [None, timesteps, n_features]) # [timesteps, n_input]
 y = tf.placeholder(tf.float32, [None, n_classes])
+
+# Hidden state
+h = tf.placeholder(tf.float32, [None, mem_size])
 #input = tf.unstack(x, timesteps, 1)
 
-# Use attention to sample n_heads values from the sequence
+# Memory weights
+# Train by BP or Reinforce? Initialize as Identity?
+W = tf.get_variable("W", [mem_size, n_units],\
+    initializer=tf.initializers.truncated_normal(stddev=0.01))
+
+# Hidden state
+#h = tf.Variable(tf.zeros(batch_size, n_units))
+
 
 # Attention network
 #X = x#tf.reshape(x, [-1,2])
@@ -269,12 +280,12 @@ y = tf.placeholder(tf.float32, [None, n_classes])
 # Feature Network
 #z = tf.layers.dense(X, n_units, tf.nn.relu)
 #z = tf.layers.dense(z, n_features, tf.nn.relu)
-X = tf.reshape(x, [-1, total_time, n_features])
+X = tf.reshape(x, [-1, timesteps, n_features])
 
 # No residual block
-l1 = tf.layers.conv1d(X, n_units, 16, dilation_rate=1)
-l2 = tf.layers.conv1d(l1, n_units, 8, dilation_rate=2)
-l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3)
+l1 = tf.layers.conv1d(X, n_units, 8, dilation_rate=1)
+l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
+l3 = tf.layers.conv1d(l2, n_units, 3, dilation_rate=3)
 # l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
 # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5)
 
@@ -296,13 +307,16 @@ l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3)
 
 d = tf.layers.flatten(tf.layers.dense(l3, n_units, tf.nn.relu))
 
-prediction = tf.layers.dense(d, n_classes) # tf.concat(z, axis=1)
+# RNN style update
+H = tf.nn.relu(tf.matmul(h, W) + d) # Add bias
+
+prediction = tf.layers.dense(H, n_classes) # tf.concat(z, axis=1)
 
 #prediction = tf.nn.softmax(tf.matmul(outputs[:,-1], out_weights) + out_bias)
 
 loss = tf.reduce_mean(tf.squared_difference(prediction,y))#tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
 
-optimizer = tf.train.AdamOptimizer(learning_rate=0.00051).minimize(loss)
+optimizer = tf.train.AdamOptimizer(learning_rate=0.0008).minimize(loss)
 
 #evaluation = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
 #accuracy = tf.reduce_mean(tf.cast(evaluation, tf.float32))
@@ -313,21 +327,39 @@ init = tf.global_variables_initializer()
 sess.run(init)
 
 total_batch = int(train.shape[0] / batch_size)
+time_batch = int(total_time / timesteps)
 #last_sample = np.zeros((x.shape[0], 2, self.n_hidden_1))
 # Training cycle
-for epoch in range(50):
+for epoch in range(100):
     avg_cost = 0
     start = time.time()
     # Loop over all batches
     for i in range(total_batch):
-        batch_x = train[i * batch_size: i * batch_size + batch_size].reshape(-1,2)
+        batch_x = train[i * batch_size: i * batch_size + batch_size]
         batch_y = y_train[i * batch_size: i * batch_size + batch_size]#np.repeat(y_train[i * batch_size: i * batch_size + batch_size], len(train)/timesteps)
+        hidden_state = np.zeros((batch_size, mem_size))
         # Run optimization op (backprop) and cost (to get loss value)
-        _, c = sess.run([optimizer, loss], feed_dict={x: batch_x, y: batch_y.reshape(-1,1)})#self.layer_3,self.unpool_1,
-        # if epoch % display_step == 0:
-        avg_cost += c / total_batch
+        for j in range(time_batch):
+            tbatch_x = batch_x[:, j * timesteps:j * timesteps + timesteps]
+            if j + 1 == time_batch:
+                _, c = sess.run([optimizer, loss], feed_dict={h: hidden_state, x: tbatch_x, y: batch_y.reshape(-1,1)})#self.layer_3,self.unpool_1,
+                # if epoch % display_step == 0:
+                avg_cost += c / total_batch
+            else:
+                hidden_state = sess.run(H, feed_dict={x: tbatch_x, h: hidden_state})
     print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_cost), "Time:", time.time() - start, "s")
-preds = np.array(sess.run([prediction], feed_dict={x: test}))[0].reshape(-1)
+preds = []
+
+for i in range(total_batch):
+    batch_x = test[i * batch_size: i * batch_size + batch_size]
+    hidden_state = np.zeros((batch_size, mem_size))
+    for j in range(time_batch):
+        tsbatch_x = batch_x[:, j * timesteps:j * timesteps + timesteps]
+        if j + 1 == time_batch:
+            preds.append(sess.run(prediction, feed_dict={h: hidden_state, x: tsbatch_x}))
+        else:
+            hidden_state = sess.run(H, feed_dict={x: tsbatch_x, h: hidden_state})
+preds = np.array(preds)
 print(preds[:10])
 print(y_test[:10])
 print("Accuracy:",np.mean(np.abs(preds - y_test) < .04))#""Accuracy:", accuracy_score(np.argmax(y_test, 1),np.argmax(preds, 1)))
