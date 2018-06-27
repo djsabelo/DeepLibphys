@@ -233,8 +233,8 @@ def get_normed_weights(shape, axis=None, scope=None, return_all=True,
             return w, g, v
     return w
 
-timesteps = 20
-total_time = 400
+timesteps = 16 # 20
+total_time = 600
 n_classes = 1
 batch_size = 20
 samples = 1000
@@ -251,9 +251,9 @@ y_test = y[-200:]
 # print(sequences.dtype)
 #exit()
 #sequences = LabelBinarizer().fit_transform(sequences)
-n_units = 64
-mem_size = 64
-attend = True
+n_units = 32
+mem_size = 32
+attend = False
 #n_features = 10
 #n_heads = 3
 
@@ -265,36 +265,52 @@ h = tf.placeholder(tf.float32, [None, mem_size])
 #input = tf.unstack(x, timesteps, 1)
 
 # Memory weights
-# Train by BP or Reinforce?
-#W = tf.get_variable("W", [n_units, mem_size],\
-#    initializer=tf.initializers.truncated_normal(stddev=0.01))
+# Train by BP or Reinforce? Initialize as Identity?
+W = tf.get_variable("W", [2*n_units, mem_size],\
+    initializer=tf.initializers.truncated_normal(stddev=0.01))
 #tf.contrib.layers.xavier_initializer())
 # Initialize as Identity
-W = tf.Variable(tf.eye(n_units, mem_size) * 0.01)
+#W = tf.Variable(tf.eye(n_units, mem_size) * 0.01)
 
-# Bias
+# Position encoding?
+#pi = tf.constant(np.pi)
+#W = tf.Variable(tf.sin(2 * pi * tf.reshape(tf.lin_space(0., n_units**2, n_units**2), [n_units, n_units])),\
+#                trainable=True)
+
+# Hidden state
+#h = tf.Variable(tf.zeros(batch_size, n_units))
+
 B = tf.Variable(tf.zeros(n_units))
 
+# Attention network
+#X = x#tf.reshape(x, [-1,2])
+#l1a = tf.layers.dense(X, n_units, tf.nn.relu)
+#a = tf.layers.dense(l1a, n_features, tf.nn.softmax)
+#a = tf.reshape(a, [-1, total_time, n_features])
+# Feature Network
+#z = tf.layers.dense(X, n_units, tf.nn.relu)
+#z = tf.layers.dense(z, n_features, tf.nn.relu)
+#X = tf.reshape(x, [-1, timesteps, n_features])
 
-#X = tf.reshape(x, [-1,2])
-#a = tf.layers.dense(X, n_units, tf.nn.relu)
-
-#X = tf.reshape(a, [-1, timesteps, n_units])
-
-# No residual block
-l1 = tf.layers.conv1d(x, n_units, 8, dilation_rate=1)
+# No residual block - 20 timesteps: 8,4,3; 16 ts: 7,4,2
+l1 = tf.layers.conv1d(x, n_units, 7, dilation_rate=1)
 l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
-l3 = tf.layers.conv1d(l2, n_units, 3, dilation_rate=3)
+l3 = tf.layers.conv1d(l2, n_units, 2, dilation_rate=3)
 # l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
 # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5)
 
+# Residual blocks
+#with tf.variable_scope('Res_conv1d'):
+#    l1 = tf.layers.conv1d(X, n_units, 16, dilation_rate=1, activation=tf.nn.relu)
+#    w = tf.get_variable('kernel')
+    # l2 = tf.layers.conv1d(l1, n_units, 8, dilation_rate=2, activation=tf.nn.relu)
+    # l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3, activation=tf.nn.relu)
+    # l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4, activation=tf.nn.relu)
+    # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5, activation=tf.nn.relu)
+# Mean
+#glimpse = tf.reduce_mean(l4,1)#tf.multiply(a, z)#tf.reduce_sum(tf.multiply(a, z),1)
 
 # Attention Layer
-'''if attend:
-    a = tf.nn.softmax(tf.layers.dense(l3, n_units, tf.nn.relu),axis=1)
-    d = tf.reduce_sum(tf.multiply(a, l3), 1)
-else:
-    d = tf.reduce_mean(tf.layers.dense(l3, n_units, tf.nn.relu), 1)'''
 if attend:
     a = tf.nn.softmax(tf.layers.dense(l3, n_units, tf.nn.relu),axis=1)
     #d = tf.reduce_sum(tf.multiply(a, l3), 1)
@@ -302,14 +318,27 @@ if attend:
 else:
     d = tf.layers.flatten(tf.layers.dense(l3, n_units, tf.nn.relu))
 
-# RNN style update
-H = tf.nn.relu(tf.matmul(h, W) + d) + B# Add bias
+# Attention to memory
+#a = tf.nn.softmax(tf.layers.dense(h, n_units, tf.nn.relu),axis=1)
+#d = tf.reduce_sum(tf.multiply(a, l3), 1)
+#h1 = tf.layers.flatten(tf.multiply(a, h))
 
+# RNN style update. Not working well. Try to add light bptt
+#H = tf.nn.relu(tf.matmul(h1, W) + d)# + B # Add bias
+H = tf.nn.relu(tf.matmul(tf.concat([h, d],1), W))
 prediction = tf.layers.dense(H, n_classes) # tf.concat(z, axis=1)
 
 #prediction = tf.nn.softmax(tf.matmul(outputs[:,-1], out_weights) + out_bias)
 
 loss = tf.reduce_mean(tf.squared_difference(prediction,y))#tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
+
+'''for i in range(num_steps):
+        start = max(0,i+1-bptt_steps)
+        stop = i+1
+        grad_list = tf.gradients(losses[i],
+                                 embed_by_step[start:stop] +\
+                                 Ws_by_step[start:stop] +\
+'''
 
 optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 
