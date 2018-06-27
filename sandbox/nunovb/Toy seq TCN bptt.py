@@ -4,7 +4,7 @@ import time
 import functools
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score
-
+#CUDA_VISIBLE_DEVICES=""
 
 def binary_activation(x):
     # For hard attention
@@ -195,43 +195,6 @@ labels /= max_l
 # sequences = np.array([np.array(LabelBinarizer().fit_transform([np.float32(np.random.randint(0, 15)) for i in range(150)])) for i in range(100)])
 #labels = LabelBinarizer().fit_transform([np.mean(seq[:3]) for seq in sequences])
 print(sequences.shape)'''
-
-def get_normed_weights(shape, axis=None, scope=None, return_all=True,
-                       reuse=False,
-                       init=tf.random_normal_initializer(stddev=0.05)):
-    """
-    Returns a normalised tensor of the given shape.
-    Args:
-      shape: the shape of the desired weights. At the moment we assume
-        this is [num_inputs x num_outputs] and we have a gain/scale per
-        output.
-      axis: the axis or axes over which to normalise. If None (default), then
-        each element is divided by the norm of the entire tensor.
-      scope: scope in which to get the variables required. Defaults to None,
-        which means `weightnorm` will be used.
-      return_all: if true, returns the allocated trainable variable as well as
-        the resulting weights.
-      reuse: whether or not to attempt to reuse variables. Default is False.
-      init: the initializer to use to initialise the variables. Defaults to the
-        values from the paper, ie. normally distributed with mean 0 and
-        standard deviation 0.05.
-    Returns:
-      - if `return_all` is true it will return `(w, g, v)` where `w` is the
-          required weights, `g` and `v` are the scale and the unnormalised
-          weights respectively.
-      - otherwise, just return `w`.
-    """
-    with tf.variable_scope(scope or 'weightnorm', reuse=reuse,
-                           initializer=init):
-        v = tf.get_variable('v', shape=shape)
-        g = tf.get_variable('g', shape=shape[-1], initializer=tf.constant_initializer(1),
-                            trainable=False)
-        inv_norm = tf.rsqrt(tf.reduce_sum(tf.square(v), reduction_indices=axis))
-        w = v * g * inv_norm
-        #w = g * tf.nn.l2_normalize(v, 1)
-        if return_all:
-            return w, g, v
-    return w
 
 timesteps = 16 # 20
 total_time = 600

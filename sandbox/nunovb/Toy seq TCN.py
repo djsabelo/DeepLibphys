@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import time
-import functools
+#import functools
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score
 
@@ -196,42 +196,36 @@ labels /= max_l
 #labels = LabelBinarizer().fit_transform([np.mean(seq[:3]) for seq in sequences])
 print(sequences.shape)'''
 
-def get_normed_weights(shape, axis=None, scope=None, return_all=True,
-                       reuse=False,
-                       init=tf.random_normal_initializer(stddev=0.05)):
-    """
-    Returns a normalised tensor of the given shape.
-    Args:
-      shape: the shape of the desired weights. At the moment we assume
-        this is [num_inputs x num_outputs] and we have a gain/scale per
-        output.
-      axis: the axis or axes over which to normalise. If None (default), then
-        each element is divided by the norm of the entire tensor.
-      scope: scope in which to get the variables required. Defaults to None,
-        which means `weightnorm` will be used.
-      return_all: if true, returns the allocated trainable variable as well as
-        the resulting weights.
-      reuse: whether or not to attempt to reuse variables. Default is False.
-      init: the initializer to use to initialise the variables. Defaults to the
-        values from the paper, ie. normally distributed with mean 0 and
-        standard deviation 0.05.
-    Returns:
-      - if `return_all` is true it will return `(w, g, v)` where `w` is the
-          required weights, `g` and `v` are the scale and the unnormalised
-          weights respectively.
-      - otherwise, just return `w`.
-    """
-    with tf.variable_scope(scope or 'weightnorm', reuse=reuse,
-                           initializer=init):
-        v = tf.get_variable('v', shape=shape)
-        g = tf.get_variable('g', shape=shape[-1], initializer=tf.constant_initializer(1),
-                            trainable=False)
-        inv_norm = tf.rsqrt(tf.reduce_sum(tf.square(v), reduction_indices=axis))
-        w = v * g * inv_norm
-        #w = g * tf.nn.l2_normalize(v, 1)
-        if return_all:
-            return w, g, v
-    return w
+def dense(x, num_units, nonlinearity=None, init_scale=1., counters={}, init=False, ema=None, name=None, **kwargs):
+    ''' fully connected layer '''
+    with tf.variable_scope(name):
+        if init:
+            # data based initialization of parameters
+            V = tf.get_variable('V', [int(x.get_shape()[1]),num_units], tf.float32, tf.random_normal_initializer(0, 0.05), trainable=True)
+            V_norm = tf.nn.l2_normalize(V.initialized_value(), [0])
+            x_init = tf.matmul(x, V_norm)
+            m_init, v_init = tf.nn.moments(x_init, [0])
+            scale_init = init_scale/tf.sqrt(v_init + 1e-10)
+            g = tf.get_variable('g', dtype=tf.float32, initializer=scale_init, trainable=True)
+            b = tf.get_variable('b', dtype=tf.float32, initializer=-m_init*scale_init, trainable=True)
+            x_init = tf.reshape(scale_init,[1,num_units])*(x_init-tf.reshape(m_init,[1,num_units]))
+            if nonlinearity is not None:
+                x_init = nonlinearity(x_init)
+            return x_init
+
+        else:
+            V,g,b = get_vars_maybe_avg(['V','g','b'], ema)
+            tf.assert_variables_initialized([V,g,b])
+
+            # use weight normalization (Salimans & Kingma, 2016)
+            x = tf.matmul(x, V)
+            scaler = g/tf.sqrt(tf.reduce_sum(tf.square(V),[0]))
+            x = tf.reshape(scaler,[1,num_units])*x + tf.reshape(b,[1,num_units])
+
+            # apply nonlinearity
+            if nonlinearity is not None:
+                x = nonlinearity(x)
+        return x
 
 #timesteps = 20
 total_time = 600
@@ -251,7 +245,7 @@ y_test = y[-200:]
 # print(sequences.dtype)
 #exit()
 #sequences = LabelBinarizer().fit_transform(sequences)
-n_units = 32
+n_units = 64
 #n_features = 10
 #n_heads = 3
 
@@ -272,20 +266,28 @@ y = tf.placeholder(tf.float32, [None, n_classes])
 X = tf.reshape(x, [-1, total_time, n_features])
 
 # No residual block
-l1 = tf.layers.conv1d(X, n_units, 16, dilation_rate=1)
-l2 = tf.layers.conv1d(l1, n_units, 8, dilation_rate=2)
-l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3)
-# l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
+# l1 = tf.layers.conv1d(X, n_units, 8, dilation_rate=1)
+# l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
+# l3 = tf.layers.conv1d(l2, n_units, 2, dilation_rate=3)
+# l3 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
 # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5)
 
 # Residual blocks
-#with tf.variable_scope('Res_conv1d'):
-#    l1 = tf.layers.conv1d(X, n_units, 16, dilation_rate=1, activation=tf.nn.relu)
-#    w = tf.get_variable('kernel')
-    # l2 = tf.layers.conv1d(l1, n_units, 8, dilation_rate=2, activation=tf.nn.relu)
-    # l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3, activation=tf.nn.relu)
+with tf.variable_scope('Res_conv1d'):
+    l1 = tf.layers.conv1d(X, n_units, 4, dilation_rate=1)
+    l1 = tf.nn.relu(tf.layers.batch_normalization(l1))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l1)), 0.99)
+    l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
+    l2 = tf.nn.relu(tf.layers.batch_normalization(l2))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l2)), 0.99)
+    # Residual connections every two layers
+    # 1x1 conv
+    # l_1x1 = tf.layers.conv1d(X, n_units, 1, dilation_rate=1)
+    l3 = tf.layers.conv1d(l2, n_units, 3, dilation_rate=4) # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l3)), 0.99)
+    l3 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=8)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
     # l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4, activation=tf.nn.relu)
     # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5, activation=tf.nn.relu)
+
 # Mean
 #glimpse = tf.reduce_mean(l4,1)#tf.multiply(a, z)#tf.reduce_sum(tf.multiply(a, z),1)
 
@@ -302,7 +304,7 @@ prediction = tf.layers.dense(d, n_classes) # tf.concat(z, axis=1)
 
 loss = tf.reduce_mean(tf.squared_difference(prediction,y))#tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
 
-optimizer = tf.train.AdamOptimizer(learning_rate=0.00051).minimize(loss)
+optimizer = tf.train.AdamOptimizer(learning_rate=0.0007).minimize(loss)
 
 #evaluation = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
 #accuracy = tf.reduce_mean(tf.cast(evaluation, tf.float32))
