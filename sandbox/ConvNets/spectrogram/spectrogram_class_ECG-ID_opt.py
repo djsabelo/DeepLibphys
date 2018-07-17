@@ -65,7 +65,7 @@ def create_spectrograms(n_samples, window_size=2048, train_ratio=0.67, nperseg=5
 # 0.9236559139784947 30; 50x50
 # 0.9260752688172043 30;60x60
 # 0.9303763440860215 30;60x60 (32,48,500)
-def get_spec(filename, n_samples, window_size, train_ratio, spec_size=30, im_size=30,nperseg, noverlap):
+def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap, spec_size=30, im_size=30):
     images_train = []
     images_test = []
     labels_train = []
