@@ -11,21 +11,19 @@ import glob
 from cv2.cv2 import resize
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix
-from keras.models import Sequential
-from keras.layers import Dense, Conv2D, ConvLSTM2D, Dropout, Activation, BatchNormalization, MaxPooling2D, Flatten
-from keras.callbacks import ReduceLROnPlateau
-from keras.models import load_model
-from keras.optimizers import SGD
-import keras.regularizers as rgl
-from keras.constraints import max_norm
+import torch
+from torch.autograd import Variable
+from torch import nn, optim
+from DeepLibphys.sandbox.ConvNets.spectrogram.Densenet import DenseNet
+
 from scipy.signal import butter, lfilter
 from itertools import repeat
 import multiprocessing as mp
-from skimage.measure import compare_ssim as ssim
+#from skimage.measure import compare_ssim as ssim
 #import keras.backend as tf
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#import os
+#os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/ECG-ID'
 
@@ -42,16 +40,16 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     y = lfilter(b, a, data)
     return y
 
-def cnn(self, in_t, reuse=False):
-    self.l1 = tf.layers.conv2d(in_t, 32, [8, 8], strides=(4, 4), reuse=reuse, activation=tf.nn.relu, name='Conv1')
-    # self.nan1 = tf.isnan(self.l1)
-    self.l2 = tf.layers.conv2d(self.l1, 64, [4, 4], strides=(2, 2), reuse=reuse, activation=tf.nn.relu,
-                               name='Conv2')
-    # print(self.l2)
-    # self.nan2 = tf.isnan(self.l2)
-    self.l3 = tf.layers.conv2d(self.l2, 64, [3, 3], strides=(1, 1), activation=tf.nn.relu, name='Conv3')
-    # self.l4 = tf.layers.flatten(self.l2)
-    return self.l3  # tf.reshape(self.l2, [1,1,1152])
+# def cnn(self, in_t, reuse=False):
+#     self.l1 = tf.layers.conv2d(in_t, 32, [8, 8], strides=(4, 4), reuse=reuse, activation=tf.nn.relu, name='Conv1')
+#     # self.nan1 = tf.isnan(self.l1)
+#     self.l2 = tf.layers.conv2d(self.l1, 64, [4, 4], strides=(2, 2), reuse=reuse, activation=tf.nn.relu,
+#                                name='Conv2')
+#     # print(self.l2)
+#     # self.nan2 = tf.isnan(self.l2)
+#     self.l3 = tf.layers.conv2d(self.l2, 64, [3, 3], strides=(1, 1), activation=tf.nn.relu, name='Conv3')
+#     # self.l4 = tf.layers.flatten(self.l2)
+#     return self.l3  # tf.reshape(self.l2, [1,1,1152])
 
 def create_spectrograms(n_samples, window_size=2048, train_ratio=0.67, nperseg=512, noverlap=480):
     #plt.ion()
@@ -65,14 +63,14 @@ def create_spectrograms(n_samples, window_size=2048, train_ratio=0.67, nperseg=5
 # 0.9236559139784947 30; 50x50
 # 0.9260752688172043 30;60x60
 # 0.9303763440860215 30;60x60 (32,48,500)
-def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap, spec_size=30, im_size=30):
+def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap, spec_size=100, im_size=60):
     images_train = []
     images_test = []
     labels_train = []
     labels_test = []
     train_length = int(n_samples * train_ratio)
     test_length = n_samples - train_length
-    train_windows = train_length // (nperseg - noverlap) - window_size // (nperseg - noverlap)  # total number of windows
+    train_windows = train_length // (nperseg - noverlap) - window_size // (nperseg - noverlap) # total number of windows
     test_windows = test_length // (nperseg - noverlap) - window_size // (nperseg - noverlap)
     # print(filename)
     original_signals = np.array(loadmat(os.path.join(DATASET_DIRECTORY, filename))['val'][0][:n_samples])  # 160000:160000+n_samples
@@ -141,7 +139,7 @@ MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/De
 os.chdir(MODEL_DIRECTORY)
 
 
-n_samples = 5000#10000 # number of samples from each subject/person
+n_samples = 10000 # number of samples from each subject/person
 
 # Optimize spec_size(15-500?), im_size(30-100) - fitness: acc - 0.2 * time taken
 returned = create_spectrograms(n_samples)
@@ -177,86 +175,32 @@ labels_train = LabelBinarizer().fit_transform(labels_train)
 labels_test = LabelEncoder().fit_transform(labels_test)
 #print(labels_train.shape)
 
-# Best 1024 ##########################
-# Accuracy: 0.9067468844005157
-# Sensitivity :  0.9072649572649574
-# Specificity :  0.9989521464097736
+max_iter = 1000 # Maximum iterations of GA
+n_pop = 20
+n_param = 4
+max_hidden_c = 64
+max_hidden_fc = 1024
+max_steps = 50
+m_8_c = np.arange(24,max_hidden_c, 8)
+print(m_8_c)
+m_32_fc = np.arange(32,max_hidden_fc, 32)
+n_layers_c = [np.random.randint(5,15) for i in range(n_pop)]
+n_hidden_c = [[np.random.choice(m_8_c) for l in range(n_layers_c[p])] for p in range(n_pop)]
+k_sizes = [[np.random.randint(3,8) for l in range(n_layers_c[p])] for p in range(n_pop)]
+n_layers_fc = [np.random.randint(1,4) for i in range(n_pop)]
+n_hidden_fc = [[np.random.choice(m_32_fc) for l in range(n_layers_fc[p])] for p in range(n_pop)]
+lr = [np.random.choice([1e-2,5e-3,1e-3,5e-4,1e-4,5e-5]) for i in range(n_pop)]
+steps = [np.random.randint(5,max_steps)for i in range(n_pop)]
+batch_size = [np.random.choice([16, 32, 48, 64, 96, 128, 160, 256]) for i in range(n_pop)] # Is there an option to increase batch size?
+#arch_type = np.random.choice(['reg','res','dense'])
+# Better than arch type is for any layer to have the ability to concatenate with any other. This allows the choice of an architecture
+# to become a more accurate process, i.e. less dependent on random choices and the experience of the practitioner.
 
-# l1 = [768, 1152, 1280]
-# l3 = 0
-# best = 0
-# for i in range(3):
-#     model = Sequential()
-#     # print(images_tr_t[1:].shape)
-#     # # Try selu, hard_sigmoid, linear
-#     model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same',
-#                      input_shape=(images_train.shape[1], images_train.shape[2], 1)))
-#     model.add(Conv2D(32, kernel_size=(5, 5), activation='relu',
-#                      padding='same'))  # , input_shape=(images_tr.shape[1], images_tr.shape[2], 1)))
-#     model.add(MaxPooling2D(pool_size=(2, 2)))  # , dim_ordering="th"))
-#     model.add(Conv2D(48, kernel_size=(3, 3), activation='relu', padding='same'))
-#     model.add(Conv2D(48, kernel_size=(5, 5), activation='relu', padding='same'))
-#     model.add(Flatten())
-#     # #model.add(Dropout(0.3))
-#     model.add(Dense(l1[i], activation='relu'))  # Try 1000
-#     #model.add(Dense(l2[i], activation='relu'))# 0.9119771085979016 700
-#     # model.add(Dropout(0.2))
-#     model.add(Dense(90, activation='softmax'))
-#
-#     sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-#     # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.92,
-#     #                              patience=5, min_lr=0.0001)
-#     # model = load_model('CNN_fantasia_clean.h5')# CNN_fantasia
-#     # Transfer learning
-#     # 0.9161095338400952 from CNN_fantasia.h5 (100ep trained w/ artifacts) -> worse
-#     # print(model.summary())
-#     # model.pop()
-#     # model.pop()
-#     # print(model.summary())
-#     # model.add(Dense(700, activation='relu'))
-#     # model.add(Dense(90, activation='softmax'))#, name='dense_2'))
-#     # 0.9274658851543182 -> 2 epochs
-#     # 0.9368073999450499 -> 100ep
-#     # 0.9134794442057012 -> 2048 2eps
-#
-#     # 2 eps (600, 300)
-#     # Accuracy: 0.8253831829250824
-#     # Sensitivity :  0.8239316239316239
-#     # Specificity :  0.9980378901282854
-#     model.compile(loss='binary_crossentropy', optimizer='adam')  #
-#     model.fit(images_train, labels_train, epochs=5, batch_size=16, verbose=0)  # , callbacks=[reduce_lr])
-#     # model.save('CNN_ECGID.h5')
-#
-#
-#
-#     # noise = 0.1*np.max(images_test[0])*np.random.normal(size=(30,30))
-#     preds = model.predict(images_test).argmax(axis=1)  # images_test[0]
-#     print(preds)
-#     print(labels_test)
-#     print(preds.shape)
-#     print(labels_test.shape)
-#     # Try average between different filter shapes
-#     # Try batch norm and max norm
-#     # Try to remove outlier windows
-#
-#     acc = accuracy_score(labels_test, preds)
-#     print(i, " Accuracy:", acc)
-#     if acc > best:
-#         l3 = l1[i]
-#         #l4 = l2[i]
-#
-#     cm = confusion_matrix(labels_test, preds)
-#
-#     FP = cm.sum(axis=0) - np.diag(cm)
-#     FN = cm.sum(axis=1) - np.diag(cm)
-#     TP = np.diag(cm)
-#     TN = cm.sum() - (FP + FN + TP)
-#
-#     sensitivity = np.mean(TP / (TP + FN))
-#     print('Sensitivity : ', sensitivity)
-#
-#     specificity = np.mean(TN / (TN + FP))
-#     print('Specificity : ', specificity)
+#layer_connections = [np.random.choice(range(n_layers_c[p]), size=np.random.randint(n_layers_c[p]-1)) for p in range(n_pop)]
+# 'or' condition to include the various connections between networks
+for it in range(max_iter):
+
+    for p in range(n_pop):
 
 model = Sequential()
 # print(images_tr_t[1:].shape)
@@ -309,38 +253,6 @@ print('Sensitivity : ', sensitivity)
 specificity = np.mean(TN / (TN + FP))
 print('Specificity : ', specificity)
 
-model.fit(images_train, labels_train, epochs=8, batch_size=16, verbose=0)#, callbacks=[reduce_lr])
-model.save('CNN_ECGID_fin_10.h5')
-
-# Accuracy: 0.9213579716373013
-# Sensitivity :  0.9186609686609687
-# Specificity :  0.9991163262349705
-
-# noise = 0.1*np.max(images_test[0])*np.random.normal(size=(30,30))
-preds = model.predict(images_test).argmax(axis=1)  # images_test[0]
-print(preds)
-print(labels_test)
-print(preds.shape)
-print(labels_test.shape)
-# Try average between different filter shapes
-# Try batch norm and max norm
-# Try to remove outlier windows
-
-
-print("Accuracy:", accuracy_score(labels_test, preds))
-cm = confusion_matrix(labels_test, preds)
-
-FP = cm.sum(axis=0) - np.diag(cm)
-FN = cm.sum(axis=1) - np.diag(cm)
-TP = np.diag(cm)
-TN = cm.sum() - (FP + FN + TP)
-
-sensitivity = np.mean(TP / (TP + FN))
-print('Sensitivity : ', sensitivity)
-
-specificity = np.mean(TN / (TN + FP))
-print('Specificity : ', specificity)
-###############################
 
 # training: 25955
 # test: 6981

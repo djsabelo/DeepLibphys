@@ -11,6 +11,7 @@ import glob
 from cv2.cv2 import resize
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix
+from keras.applications.mobilenetv2 import MobileNetV2
 from keras.models import Sequential
 from keras.layers import Dense, Conv2D, ConvLSTM2D, Dropout, Activation, BatchNormalization, MaxPooling2D, Flatten
 from keras.callbacks import ReduceLROnPlateau
@@ -243,31 +244,20 @@ labels_test = LabelEncoder().fit_transform(labels_test)
 #
 #     specificity = np.mean(TN / (TN + FP))
 #     print('Specificity : ', specificity)
+model = MobileNetV2(input_shape=None, alpha=1.0, depth_multiplier=1, include_top=True, weights='imagenet', input_tensor=None, pooling=None, classes=1000)
 
-model = Sequential()
-# print(images_tr_t[1:].shape)
-# # Try selu, hard_sigmoid, linear
-model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', padding='same',
-                 input_shape=(images_train.shape[1], images_train.shape[2], 1)))
-model.add(Conv2D(32, kernel_size=(5, 5), activation='relu',
-                 padding='same'))  # , input_shape=(images_tr.shape[1], images_tr.shape[2], 1)))
-model.add(MaxPooling2D(pool_size=(2, 2)))  # , dim_ordering="th"))
-model.add(Conv2D(48, kernel_size=(3, 3), activation='relu', padding='same'))
-model.add(Conv2D(48, kernel_size=(5, 5), activation='relu', padding='same'))
+#model = load_model('mobilenet_v2.h5', custom_objects={
+                   #'relu6': mobilenetv2.relu6})
+
 print(model.summary())
-model.add(Flatten())
-# #model.add(Dropout(0.3))
-model.add(Dense(1024, activation='relu'))  # Try 1000
-#model.add(Dense(l4, activation='relu'))# 0.9119771085979016 700
-model.add(Dense(90, activation='softmax'))
 
 sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.92,
 #                              patience=5, min_lr=0.0001)
 
 model.compile(loss='binary_crossentropy', optimizer='adam')  #
-model.fit(images_train, labels_train, epochs=2, batch_size=16, verbose=0)#, callbacks=[reduce_lr])
-model.save('CNN_ECGID_fin_2.h5')
+model.fit(images_train, labels_train, epochs=2, batch_size=64, verbose=0)#, callbacks=[reduce_lr])
+model.save('Mobilenetv2_ECGID_2ep.h5')
 
 
 # noise = 0.1*np.max(images_test[0])*np.random.normal(size=(30,30))
@@ -295,8 +285,8 @@ print('Sensitivity : ', sensitivity)
 specificity = np.mean(TN / (TN + FP))
 print('Specificity : ', specificity)
 
-model.fit(images_train, labels_train, epochs=8, batch_size=16, verbose=0)#, callbacks=[reduce_lr])
-model.save('CNN_ECGID_fin_10.h5')
+model.fit(images_train, labels_train, epochs=8, batch_size=64, verbose=0)#, callbacks=[reduce_lr])
+model.save('Mobilenetv2_ECGID_2ep.h5')
 
 # Accuracy: 0.9213579716373013
 # Sensitivity :  0.9186609686609687
