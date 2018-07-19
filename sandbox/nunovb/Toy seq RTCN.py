@@ -1,10 +1,11 @@
 import tensorflow as tf
+from tensorflow.contrib.rnn import GRUCell
 import numpy as np
 import time
 import functools
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn.metrics import accuracy_score
-#CUDA_VISIBLE_DEVICES=""
+
 
 def binary_activation(x):
     # For hard attention
@@ -196,10 +197,11 @@ labels /= max_l
 #labels = LabelBinarizer().fit_transform([np.mean(seq[:3]) for seq in sequences])
 print(sequences.shape)'''
 
-timesteps = 16 # 20
+
+#timesteps = 20
 total_time = 600
 n_classes = 1
-batch_size = 20
+batch_size = 16
 samples = 1000
 n_features = 2
 
@@ -208,45 +210,21 @@ print(X.shape)
 print(y.shape)
 
 train = X[800:]
-test = X[-200:]
+test = X[-200:].reshape(-1,2)
 y_train = y[800:]
 y_test = y[-200:]
 # print(sequences.dtype)
 #exit()
 #sequences = LabelBinarizer().fit_transform(sequences)
-n_units = 32
-mem_size = 32
-attend = True
+n_units = 64
 #n_features = 10
 #n_heads = 3
 
-x = tf.placeholder(tf.float32, [None, timesteps, n_features]) # [timesteps, n_input]
+x = tf.placeholder(tf.float32, [None, n_features]) # [timesteps, n_input]
 y = tf.placeholder(tf.float32, [None, n_classes])
-
-# All the hidden vectors (features) in the last 16 timesteps
-batch = tf.placeholder(tf.float32, [None, timesteps, n_units])
-
-# Hidden state
-h = tf.placeholder(tf.float32, [None, mem_size])
 #input = tf.unstack(x, timesteps, 1)
 
-# Memory weights
-# Train by BP or Reinforce? Initialize as Identity?
-W = tf.get_variable("W", [n_units, mem_size],\
-    initializer=tf.initializers.truncated_normal(stddev=0.01))
-#tf.contrib.layers.xavier_initializer())
-# Initialize as Identity
-#W = tf.Variable(tf.eye(n_units, mem_size) * 0.01)
-
-# Position encoding?
-#pi = tf.constant(np.pi)
-#W = tf.Variable(tf.sin(2 * pi * tf.reshape(tf.lin_space(0., n_units**2, n_units**2), [n_units, n_units])),\
-#                trainable=True)
-
-# Hidden state
-#h = tf.Variable(tf.zeros(batch_size, n_units))
-
-B = tf.Variable(tf.zeros(n_units))
+# Use attention to sample n_heads values from the sequence
 
 # Attention network
 #X = x#tf.reshape(x, [-1,2])
@@ -256,64 +234,62 @@ B = tf.Variable(tf.zeros(n_units))
 # Feature Network
 #z = tf.layers.dense(X, n_units, tf.nn.relu)
 #z = tf.layers.dense(z, n_features, tf.nn.relu)
-#X = tf.reshape(x, [-1, timesteps, n_features])
+X = tf.reshape(x, [-1, total_time, n_features])
 
-# No residual block - 20 timesteps: 8,4,3; 16 ts: 7,4,2
-l1 = tf.layers.conv1d(x, n_units, 4, dilation_rate=1)
-l1 = tf.nn.relu(tf.layers.batch_normalization(l1))
-l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
-l2 = tf.nn.relu(tf.layers.batch_normalization(l2))
-l3 = tf.layers.conv1d(l2, n_units, 3, dilation_rate=3)
-l13 = tf.nn.relu(tf.layers.batch_normalization(l3))
-# l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
+# No residual block
+# l1 = tf.layers.conv1d(X, n_units, 8, dilation_rate=1)
+# l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
+# l3 = tf.layers.conv1d(l2, n_units, 2, dilation_rate=3)
+# l3 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4)
 # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5)
 
 # Residual blocks
-#with tf.variable_scope('Res_conv1d'):
-#    l1 = tf.layers.conv1d(X, n_units, 16, dilation_rate=1, activation=tf.nn.relu)
-#    w = tf.get_variable('kernel')
-    # l2 = tf.layers.conv1d(l1, n_units, 8, dilation_rate=2, activation=tf.nn.relu)
-    # l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=3, activation=tf.nn.relu)
+with tf.variable_scope('Res_conv1d'):
+    l1 = tf.layers.conv1d(X, n_units, 8, dilation_rate=1)
+    l1 = tf.nn.relu(tf.layers.batch_normalization(l1))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l1)), 0.99)
+    l2 = tf.layers.conv1d(l1, n_units, 4, dilation_rate=2)
+    l2 = tf.nn.relu(tf.layers.batch_normalization(l2))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l2)), 0.99)
+    # Residual connections every two layers
+    # 1x1 conv
+    # l_1x1 = tf.layers.conv1d(X, n_units, 1, dilation_rate=1)
+    l3 = tf.layers.conv1d(l2, n_units, 4, dilation_rate=4) # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))#tf.nn.dropout(tf.nn.relu(tf.layers.batch_normalization(l3)), 0.99)
+    l3 = tf.layers.conv1d(l3, n_units, 4, dilation_rate=8)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
+    l3 = tf.layers.conv1d(l3, n_units, 4, dilation_rate=16)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
+    l3 = tf.layers.conv1d(l3, n_units, 4, dilation_rate=32)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
+    l3 = tf.layers.conv1d(l3, n_units, 5, dilation_rate=64)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
+    l3 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=128)  # tf.concat([l2, l_1x1], 1)
+    l3 = tf.nn.relu(tf.layers.batch_normalization(l3))
+    #print(l3)
     # l4 = tf.layers.conv1d(l3, n_units, 2, dilation_rate=4, activation=tf.nn.relu)
     # l5 = tf.layers.conv1d(l4, n_units, 1, dilation_rate=5, activation=tf.nn.relu)
+
 # Mean
 #glimpse = tf.reduce_mean(l4,1)#tf.multiply(a, z)#tf.reduce_sum(tf.multiply(a, z),1)
 
-# Attention Layer
-if attend:
-    a = tf.nn.softmax(tf.layers.dense(l3, n_units, tf.nn.relu),axis=1)
-    #d = tf.reduce_sum(tf.multiply(a, l3), 1)
-    feat_vec = tf.layers.flatten(tf.multiply(a, l3))
-else:
-    feat_vec = tf.layers.flatten(tf.layers.dense(l3, n_units, tf.nn.relu))
+# Attention
+#a = tf.nn.softmax(tf.layers.dense(z, n_units, tf.nn.relu),axis=1)
+#glimpse = tf.reduce_sum(tf.multiply(a, z),1)#tf.expand_dims(a, 2)
 
-# Attention to memory
-#a = tf.nn.softmax(tf.layers.dense(h, n_units, tf.nn.relu),axis=1)
-#d = tf.reduce_sum(tf.multiply(a, l3), 1)
-#h1 = tf.layers.flatten(tf.multiply(a, h))
 
-# RNN style update
-# Change to tf.scan...
-# This would only be e2e trainable if all the data is in the graph.
-# If there are feature vectors exiting the graph, maybe RL has to be used.
-H = tf.nn.relu(tf.matmul(h, W) + batch)
+#d = tf.layers.flatten(tf.layers.dense(l3, n_units, tf.nn.relu))
 
-#H = tf.nn.relu(tf.matmul(tf.concat([h, d],1), W))
-prediction = tf.layers.dense(H, n_classes) # tf.concat(z, axis=1)
+# Is it processing all the features on each timestep optimally?
+cell = GRUCell(16)
+outputs, state = tf.nn.dynamic_rnn(cell, l3, dtype=tf.float32)
 
+outputs = tf.layers.flatten(outputs)
+
+prediction = tf.layers.dense(outputs, n_classes) # tf.concat(z, axis=1)
 #prediction = tf.nn.softmax(tf.matmul(outputs[:,-1], out_weights) + out_bias)
 
 loss = tf.reduce_mean(tf.squared_difference(prediction,y))#tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
 
-'''for i in range(num_steps):
-        start = max(0,i+1-bptt_steps)
-        stop = i+1
-        grad_list = tf.gradients(losses[i],
-                                 embed_by_step[start:stop] +\
-                                 Ws_by_step[start:stop] +\
-'''
-
-optimizer = tf.train.AdamOptimizer(learning_rate=0.0005).minimize(loss)
+optimizer = tf.train.AdamOptimizer(learning_rate=0.0007).minimize(loss)
 
 #evaluation = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
 #accuracy = tf.reduce_mean(tf.cast(evaluation, tf.float32))
@@ -324,40 +300,21 @@ init = tf.global_variables_initializer()
 sess.run(init)
 
 total_batch = int(train.shape[0] / batch_size)
-time_batch = int(total_time / timesteps)
 #last_sample = np.zeros((x.shape[0], 2, self.n_hidden_1))
 # Training cycle
-for epoch in range(120):
+for epoch in range(50):
     avg_cost = 0
     start = time.time()
     # Loop over all batches
     for i in range(total_batch):
-        batch_x = train[i * batch_size: i * batch_size + batch_size]
+        batch_x = train[i * batch_size: i * batch_size + batch_size].reshape(-1,2)
         batch_y = y_train[i * batch_size: i * batch_size + batch_size]#np.repeat(y_train[i * batch_size: i * batch_size + batch_size], len(train)/timesteps)
-        batches = [] #np.zeros((batch_size, mem_size))
         # Run optimization op (backprop) and cost (to get loss value)
-        for j in range(time_batch):
-            tbatch_x = batch_x[:, j * timesteps:j * timesteps + timesteps]
-            feature_vector = sess.run(feat_vec, feed_dict={x: tbatch_x})
-            print(feature_vector)
-            batches.append(feature_vector)
-            if j + 1 == time_batch:
-                _, c = sess.run([optimizer, loss], feed_dict={batch: np.array(batches), y: batch_y.reshape(-1,1)})#self.layer_3,self.unpool_1,
-                # if epoch % display_step == 0:
-                avg_cost += c / total_batch
-
+        _, c = sess.run([optimizer, loss], feed_dict={x: batch_x, y: batch_y.reshape(-1,1)})#self.layer_3,self.unpool_1,
+        # if epoch % display_step == 0:
+        avg_cost += c / total_batch
     print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_cost), "Time:", time.time() - start, "s")
-preds = []
-for i in range(total_batch):
-    batch_x = test[i * batch_size: i * batch_size + batch_size]
-    hidden_state = np.zeros((batch_size, mem_size))
-    for j in range(time_batch):
-        tsbatch_x = batch_x[:, j * timesteps:j * timesteps + timesteps]
-        if j + 1 == time_batch:
-            preds.append(sess.run(prediction, feed_dict={h: hidden_state, x: tsbatch_x}))
-        else:
-            hidden_state = sess.run(H, feed_dict={x: tsbatch_x, h: hidden_state})
-preds = np.array(preds).reshape(-1)
+preds = np.array(sess.run([prediction], feed_dict={x: test}))[0].reshape(-1)
 print(preds[:10])
 print(y_test[:10])
 print("Accuracy:",np.mean(np.abs(preds - y_test) < .04))#""Accuracy:", accuracy_score(np.argmax(y_test, 1),np.argmax(preds, 1)))

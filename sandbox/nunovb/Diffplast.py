@@ -7,7 +7,7 @@ TYPE = 'plastic'
 
 # Create model
 class PlastMLP:
-    def __init__(self, n_input, n_hidden_1=32, n_hidden_2=32, n_classes):
+    def __init__(self, n_input, n_hidden_1=32, n_hidden_2=32, n_classes=None):
         # n_hidden_1: 1st and 3rd layer number of neurons
         # n_hidden_2: 2nd(Latent) layer number of neurons
         # n_input: length of ECG window
