@@ -1,5 +1,5 @@
 from DeepLibphys.utils.functions.common import get_fantasia_full_paths, remove_noise
-from DeepLibphys.sandbox.ConvNets import CNN
+#from DeepLibphys.sandbox.ConvNets import CNN
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,7 +22,7 @@ from keras.constraints import max_norm
 from scipy.signal import butter, lfilter
 from itertools import repeat
 import multiprocessing as mp
-from skimage.measure import compare_ssim as ssim
+#from skimage.measure import compare_ssim as ssim
 #import keras.backend as tf
 
 import os

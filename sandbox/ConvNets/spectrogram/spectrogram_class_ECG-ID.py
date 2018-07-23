@@ -1,5 +1,5 @@
 from DeepLibphys.utils.functions.common import get_fantasia_full_paths, remove_noise
-from DeepLibphys.sandbox.ConvNets import CNN
+#from DeepLibphys.sandbox.ConvNets import CNN
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,13 +21,14 @@ from keras.constraints import max_norm
 from scipy.signal import butter, lfilter
 from itertools import repeat
 import multiprocessing as mp
-from skimage.measure import compare_ssim as ssim
+#from skimage.measure import compare_ssim as ssim
 #import keras.backend as tf
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#import os
+#os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
-DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/ECG-ID'
+#DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/ECG-ID'
+#DATASET_DIRECTORY = '/home/nvb/Data/ECG-ID'
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
@@ -86,23 +87,26 @@ def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap):
                                 500, nperseg=nperseg, noverlap=noverlap, window=('tukey',.5))#, mode='complex')
 
         #print(Sxx)#.shape)
-        Sxx = resize(Sxx[:30, :], (100,100)) # try 60x60 and cutting less
+        #Sxx[Sxx == None] = 0
+        Sxx = resize(np.log(Sxx[:150, :]), (100,100)) # try 60x60 and cutting less
+        #Sxx = resize(Sxx[:150, :], (100, 100))
         #Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
         # Try to normalize
 
         Sxx = (Sxx / np.max(Sxx))#.astype('df')
         ###Sxx = np.round(Sxx, 2) * 256
-        # plt.imshow(Sxx)
+        plt.imshow(Sxx)
         # plt.axis('off')
         # plt.pause(0.3)
-        # plt.show()
+        plt.show()
+
         labels_train.append(filename.split('/')[-2])
         images_train.append(Sxx)
     for j in range(test_windows):
         f, t, Sxx = spectrogram(test_signals[j * (nperseg - noverlap): j * (nperseg - noverlap) + window_size],
                                 500, nperseg=nperseg, noverlap=noverlap, window=('tukey',.5))#, mode='complex')
-
-        Sxx = resize(Sxx[:30, :], (100,100))
+        #Sxx[Sxx == None] = 0
+        Sxx = resize(Sxx[:150, :], (100,100))
         # Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
         Sxx = (Sxx / np.max(Sxx))#.astype('f') # TRY * 100 & 256
         #Sxx = np.round(Sxx, 2) * 256
@@ -124,8 +128,8 @@ def convertw(list, n):
 
 # SPEC_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Spectrograms/Fantasia"
 # os.chdir(SPEC_DIRECTORY)
-MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/bento"
-os.chdir(MODEL_DIRECTORY)
+#MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/bento"
+#os.chdir(MODEL_DIRECTORY)
 
 
 n_samples = 10000 # number of samples from each subject/person
