@@ -28,7 +28,8 @@ import multiprocessing as mp
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
-DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/ECG-ID'
+#DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/ECG-ID'
+DATASET_DIRECTORY = '/home/nvb/Data/ECG-ID'
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
     nyq = 0.5 * fs
@@ -37,6 +38,9 @@ def butter_bandpass(lowcut, highcut, fs, order=5):
     b, a = butter(order, [low, high], btype='band')
     return b, a
 
+def normalize(x):
+    #return ((x - np.min(x)) / (np.max(x) - np.min(x))) * 2 - 1
+    return (x - np.mean(x))/ np.std(x)
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
@@ -87,11 +91,11 @@ def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap):
                                 500, nperseg=nperseg, noverlap=noverlap, window=('tukey',.5))#, mode='complex')
 
         #print(Sxx)#.shape)
-        Sxx = resize(Sxx[:30, :], (100,100)) # try 60x60 and cutting less
+        Sxx = resize(Sxx[:120, :], (160,160)) # try 60x60 and cutting less
         #Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
         # Try to normalize
-
-        Sxx = (Sxx / np.max(Sxx))#.astype('df')
+        Sxx = normalize(Sxx)
+        #Sxx = (Sxx / np.max(Sxx))#.astype('df')
         ###Sxx = np.round(Sxx, 2) * 256
         # plt.imshow(Sxx)
         # plt.axis('off')
@@ -103,9 +107,10 @@ def get_spec(filename, n_samples, window_size, train_ratio, nperseg, noverlap):
         f, t, Sxx = spectrogram(test_signals[j * (nperseg - noverlap): j * (nperseg - noverlap) + window_size],
                                 500, nperseg=nperseg, noverlap=noverlap, window=('tukey',.5))#, mode='complex')
 
-        Sxx = resize(Sxx[:30, :], (100,100))
+        Sxx = resize(Sxx[:120, :], (160,160))
         # Sxx = cvtColor(Sxx, COLOR_GRAY2BGR)
-        Sxx = (Sxx / np.max(Sxx))#.astype('f') # TRY * 100 & 256
+        Sxx = normalize(Sxx)
+        #Sxx = (Sxx / np.max(Sxx))#.astype('f') # TRY * 100 & 256
         #Sxx = np.round(Sxx, 2) * 256
         labels_test.append(filename.split('/')[-2])
         images_test.append(Sxx)
@@ -125,8 +130,8 @@ def convertw(list, n):
 
 # SPEC_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Spectrograms/Fantasia"
 # os.chdir(SPEC_DIRECTORY)
-MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/bento"
-os.chdir(MODEL_DIRECTORY)
+#MODEL_DIRECTORY = "/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/bento"
+#os.chdir(MODEL_DIRECTORY)
 
 
 n_samples = 10000 # number of samples from each subject/person
@@ -138,12 +143,12 @@ images_train, images_test, labels_train, labels_test = convertw(returned, 0),\
                                                        convertw(returned, 3),
 
 
-np.savez("filtered_spec_ecgid", images_train=images_train, images_test=images_test, labels_train=labels_train, labels_test=labels_test)
-file = np.load("filtered_spec_ecgid.npz")
-images_train = file['images_train'].astype(np.float32)
-images_test = file['images_test'].astype(np.float32)
-labels_train = file['labels_train']
-labels_test = file['labels_test']
+# np.savez("filtered_spec_ecgid", images_train=images_train, images_test=images_test, labels_train=labels_train, labels_test=labels_test)
+# file = np.load("filtered_spec_ecgid.npz")
+# images_train = file['images_train'].astype(np.float32)
+# images_test = file['images_test'].astype(np.float32)
+# labels_train = file['labels_train']
+# labels_test = file['labels_test']
 
 print(images_train.shape)
 print(images_train.dtype)
@@ -244,7 +249,7 @@ labels_test = LabelEncoder().fit_transform(labels_test)
 #
 #     specificity = np.mean(TN / (TN + FP))
 #     print('Specificity : ', specificity)
-model = MobileNetV2(input_shape=None, alpha=1.0, depth_multiplier=1, include_top=True, weights='imagenet', input_tensor=None, pooling=None, classes=1000)
+model = MobileNetV2(input_shape=(160,160,1), alpha=1.0, depth_multiplier=1, include_top=True, weights='imagenet', input_tensor=None, pooling=None, classes=1000)
 
 #model = load_model('mobilenet_v2.h5', custom_objects={
                    #'relu6': mobilenetv2.relu6})
@@ -256,7 +261,7 @@ sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 #                              patience=5, min_lr=0.0001)
 
 model.compile(loss='binary_crossentropy', optimizer='adam')  #
-model.fit(images_train, labels_train, epochs=2, batch_size=64, verbose=0)#, callbacks=[reduce_lr])
+model.fit(images_train, labels_train, epochs=2, batch_size=64, verbose=1)#, callbacks=[reduce_lr])
 model.save('Mobilenetv2_ECGID_2ep.h5')
 
 
@@ -285,7 +290,7 @@ print('Sensitivity : ', sensitivity)
 specificity = np.mean(TN / (TN + FP))
 print('Specificity : ', specificity)
 
-model.fit(images_train, labels_train, epochs=8, batch_size=64, verbose=0)#, callbacks=[reduce_lr])
+model.fit(images_train, labels_train, epochs=8, batch_size=64, verbose=1)#, callbacks=[reduce_lr])
 model.save('Mobilenetv2_ECGID_2ep.h5')
 
 # Accuracy: 0.9213579716373013
