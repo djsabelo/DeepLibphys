@@ -11,20 +11,21 @@ import scipy.signal as sig
 from matplotlib import gridspec
 from matplotlib.font_manager import FontProperties
 from novainstrumentation.smooth import smooth
+from novainstrumentation.panthomkins.detect_panthomkins_peaks import detect_panthomkins_peaks
 from scipy.interpolate import griddata
 from sklearn.model_selection import train_test_split
 from matplotlib.backends.backend_pdf import PdfPages
 import pandas
 from multiprocessing import Pool
 from itertools import repeat
-import sys
+import h5py
 
-import DeepLibphys.models.libphys_GRU as GRU
+import DeepLibphys.models_tf.LibphysDNN as GRU
 
-DATASET_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Current Trained/'
-TRAINED_DATA_DIRECTORY = '../data/trained/'
+DATASET_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Current Trained/'
+PROCESSED_DATA_DIRECTORY = '../data/processed/'
 COLORMAP_DIRECTORY = '../data/biosig_colormap/'
-RAW_SIGNAL_DIRECTORY = '/media/bento/Storage/owncloud/Biosignals/Research Projects/DeepLibphys/Signals/'
+RAW_SIGNAL_DIRECTORY = '/media/belo/Storage/owncloud/Research Projects/DeepLibphys/Signals/'
 FANTASIA_ECG = 'Fantasia/ECG/mat/'
 FANTASIA_RESP = 'Fantasia/RESP/mat/'
 CYBHi_ECG = 'CYBHi/data/long-term'
@@ -100,6 +101,27 @@ def remove_noise(signal, moving_avg_window=60, smooth_window=10):
     signal -= np.mean(abs(signal))
     return signal
 
+
+def remove_cybhi_noise(original_signal, moving_avg_window=60, smooth_window=10, fs=1000):
+    original_signal = original_signal - smooth(original_signal, fs)
+    original_signal = smooth(original_signal, int(smooth_window*8))
+    original_signal = scp.signal.decimate(original_signal, 4)
+
+    # original_signal -= (np.mean(abs(original_signal)))
+    moving_maximum = np.array(moving_max(original_signal, int(fs/8)))
+    moving_minimum = np.array(moving_min(original_signal, int(fs/8)))
+    moving_maximum = smooth(moving_maximum-moving_minimum, int(fs/8))
+    signal_ = original_signal / moving_maximum
+
+    signal = process_dnn_signal(signal_, 256, window_rmavg=None, confidence=0.01)
+    # plt.plot((original_signal - np.min(original_signal))*256/np.max(original_signal - np.min(original_signal)))
+    # plt.plot((signal_ - np.min(signal_/np.max(signal_)))*256/np.max(signal_ - np.min(signal_)))
+    # plt.plot(signal)
+    # plt.show()
+
+    return signal
+
+
 def process_signal(signal, interval_size, peak_into_data, decimate, regression):
     if (decimate is not None and isinstance(decimate, int)) and not isinstance(decimate, bool):
         signal = signal[100000:400000]
@@ -120,7 +142,7 @@ def process_signal(signal, interval_size, peak_into_data, decimate, regression):
         return signal.astype(int)                               # insert signal into an array of signals
 
 
-def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60, window_rmstd=2000, confidence=0.0001):
+def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=250*4, window_rmstd=250, confidence=0.0001):
     # plt.figure(0)
     # plt.plot(signal[0])
 
@@ -129,7 +151,8 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60,
     # plt.plot(signal[0])
     # plt.show()
 
-    signal = remove_moving_avg(signal, window_rmavg)
+    if window_rmavg is not None:
+        signal = remove_moving_avg(signal, window_rmavg)
     # plt.figure(2)
     # plt.plot(signal[0])
     # plt.show()
@@ -141,14 +164,14 @@ def process_dnn_signal(signal, interval_size, window_smooth=10, window_rmavg=60,
         signalx = np.array([smooth(signal_, window_smooth) for signal_ in signal])
         # plt.plot(signalx[0])
         # plt.show()
-        return np.array([quantize_signal(signal_, interval_size, confidence) for signal_ in signalx])
+        return np.array([quantitize_signal(signal_, interval_size, confidence) for signal_ in signalx])
     else:
         signal = smooth(signal, window_smooth)
         # plt.figure()
         # plt.plot(signal[1000:2000])
         # plt.show()
 
-        return quantize_signal(signal, interval_size, confidence)
+        return quantitize_signal(signal, interval_size, confidence)
 
 def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, window_smooth=20, window_rmstd=1000,
                          window_rmavg=60, confidence=0.0001):
@@ -191,9 +214,19 @@ def process_dnn_segments(signal, interval_size, window_size=256, overlap=0.33, w
     #
     # plt.show()
     # return np.array(y)
-    return np.array([quantize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
+    return np.array([quantitize_signal(signal_, interval_size, confidence) for signal_ in signal_matrix])
 
-def quantize_signal(signal, interval_size, confidence = 0.001):
+def quantitize_signal(signal, interval_size, confidence = 0.001):
+
+    signal = truncate_signal(signal, confidence)
+    signal -= np.min(signal)           # removed the minimum value
+    signal = signal / np.max(signal)   # made a discrete representation of the signal
+    signal *= (interval_size - 1)      # with "interval_size" steps (min = 0, max = interval_size-1))
+
+    return np.around(signal).astype(int) # insert signal into an array of signals
+
+
+def truncate_signal(signal, confidence):
     n, bins = np.histogram(signal.T, 10000)
     distribution_sum = np.cumsum(n)
     index_min = np.where(distribution_sum <= confidence * np.sum(n))[0]
@@ -202,13 +235,7 @@ def quantize_signal(signal, interval_size, confidence = 0.001):
     MAX = bins[index_max[0]] if len(index_max) > 0 else np.max(signal)
     signal[signal >= MAX] = MAX
     signal[signal <= MIN] = MIN
-
-    signal -= np.min(signal)           # removed the minimum value
-    signal = signal / np.max(signal)   # made a discrete representation of the signal
-    signal *= (interval_size - 1)      # with "interval_size" steps (min = 0, max = interval_size-1))
-
-    return np.around(signal).astype(int) # insert signal into an array of signals
-
+    return signal
 
 def process_web_signal(signal, interval_size, smooth_window, peak_into_data, decimate=None, window=1, smooth_type='hanning'):
                    # smooth the signal
@@ -229,8 +256,12 @@ def process_web_signal(signal, interval_size, smooth_window, peak_into_data, dec
     return signal.astype(int)                               # insert signal into an array of signals
 
 def remove_moving_avg(signal, window_size=60):
-    signalx = np.zeros_like(signal)
+    signal -= smooth(signal, window_size)
+    return signal
 
+
+def moving_avg(signal, window_size=60):
+    signalx = np.zeros_like(signal)
     for i in range(np.shape(signal)[-1]):
         n = [int(i - window_size/2), int(window_size/2 + i)]
 
@@ -239,12 +270,57 @@ def remove_moving_avg(signal, window_size=60):
 
         if np.shape(signal[n[0]:n[1]])[-1] > 0:
             if len(np.shape(signal)) == 1:
-                signalx[n[0]:n[1]] = (signal[n[0]:n[1]] - np.mean(signal[n[0]:n[1]], axis=0))
+                signalx[i] = np.mean(signal[n[0]:n[1]], axis=0)
             else:
-                signalx[:, n[0]:n[1]] = (signal[:, n[0]:n[1]] - np.mean(signal[:, n[0]:n[1]], axis=0))
+                signalx[:, i] = np.mean(signal[:, n[0]:n[1]], axis=0)
 
     return signalx
 
+
+def moving_max(signal, window_size=60):
+    pool = Pool(10)
+
+    windows = []
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        if n[0] < window_size/2:
+            n[0] = 0
+        if n[1] > np.shape(signal)[-1]:
+            n[1] = np.shape(signal)[-1]
+
+        windows.append(signal[n[0]:n[1]])
+
+    returned = pool.starmap(moving_maxi, zip(windows))
+    pool.close()
+    return returned
+
+
+def moving_maxi(window):
+    return np.max(window, axis=0)
+
+
+def moving_min(signal, window_size=60):
+    pool = Pool(10)
+
+    windows = []
+    for i in range(len(signal)):
+        n = [int(i - window_size/2), int(window_size/2 + i)]
+
+        if n[0] < window_size/2:
+            n[0] = 0
+        if n[1] > np.shape(signal)[-1]:
+            n[1] = np.shape(signal)[-1]
+
+        windows.append(signal[n[0]:n[1]])
+
+    returned = pool.starmap(moving_mini, zip(windows))
+    pool.close()
+    return np.array(returned)
+
+
+def moving_mini(window):
+    return np.min(window, axis=0)
 
 def remove_moving_std(signal, window_size=2000):
     signalx = np.zeros_like(signal)
@@ -269,10 +345,7 @@ def remove_moving_std(signal, window_size=2000):
 #####################################################################################################################"""
 
 
-def get_fantasia_dataset(signal_dim, example_index_array=None, dataset_dir=FANTASIA_ECG, peak_into_data=False):
-    if example_index_array is None:
-        example_index_array = np.arange(40)
-
+def get_fantasia_dataset(signal_dim, example_index_array, dataset_dir=FANTASIA_ECG, peak_into_data=False):
     full_paths = get_fantasia_full_paths(dataset_dir, example_index_array)
     signals = []
     for file_path in full_paths:
@@ -380,6 +453,45 @@ def get_fantasia_full_paths(dataset_dir, example_index_array):
 
     return full_paths
 
+def get_full_paths(dataset_dir):
+    if RAW_SIGNAL_DIRECTORY not in dataset_dir:
+        dataset_dir = RAW_SIGNAL_DIRECTORY + dataset_dir
+    full_paths = os.listdir(dataset_dir)
+    returned = []
+
+    for file_path in full_paths:
+        if file_path[-2:] == "h5" or file_path[-3:] == "txt" or file_path[-3:] == "mat":
+            returned.append(dataset_dir + "/" + file_path)
+        elif os.path.isdir(dataset_dir + "/" + file_path):
+            returned += get_full_paths(dataset_dir + "/" + file_path)
+
+    return returned
+
+def open_inside_h5(file):
+    print(file)
+    h5f = h5py.File(file, 'r')
+    ECG = h5f['dataset_1'][:, 3]
+    time = h5f['dataset_1'][:, 1]
+    Acc = h5f['dataset_1'][:, 4:7]
+    fs = 1000
+    return ECG, Acc, time, fs
+
+
+def load_files_in_inside_dataset(dataset_dir):
+    full_paths = get_full_paths(dataset_dir)
+    dataset = {}
+    clusters = {}
+    for file_path in full_paths:
+        if file_path[-2:] == "h5":
+            ID = int(file_path.split('/')[-2])
+            if file_path.split('/')[-1].split('.')[0].split('_')[0] == "ypred":
+                clusters[ID] = h5py.File(file_path, 'r')['data'][:]
+            else:
+                dataset[ID], _, _, _ = open_inside_h5(file_path)
+
+    return dataset, clusters
+
+
 
 def get_cyb_dataset_files(signal_dim, dataset_dir=CYBHi_ECG, peak_into_data=False, confidence=0.001):
     train_dates, train_names, train_signals, test_dates, test_names, test_signals = \
@@ -449,7 +561,7 @@ def get_cyb_dataset_segmented(signal_dim, window_size=1024, dataset_dir=CYBHi_EC
     return train_dates, train_names, processed_train_signals, test_dates, test_names, processed_test_signals
 
 def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
-    dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
+    # dataset_dir = RAW_SIGNAL_DIRECTORY + CYBHi_ECG
     full_paths = os.listdir(dataset_dir)
     train_signals = []
     test_signals = []
@@ -464,12 +576,15 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
             print("Processing file: {0}".format(file))
             try:
                 filename = file_path.split('/')[-1].split('.')[0]
-                name = filename[9:-6]
-                date = filename[:8]
+                name = filename.split('-')[1]
+                print(name)
+                date = filename.split('-')[0]
+                print(date)
                 if (index_names is not None) and (name not in index_names):
                     pass
                 else:
-                    signal = np.loadtxt(file)[:, 3]
+                    signal = np.loadtxt(file)
+                    # plt.plot()
                     # signal = sig.decimate(signal, 4)
                     N = len(signal)
                     time = len(signal)/fs
@@ -483,24 +598,29 @@ def get_cyb_dataset_raw_files(dataset_dir=CYBHi_ECG, index_names=None):
                         train_signals.append(signal)
                         train_names.append(name)
                         train_dates.append(date)
+                        print("Train {0}".format(name))
                     else:
                         test_signals.append(signal)
                         test_names.append(name)
                         test_dates.append(date)
+                        print("Test {0}".format(name))
 
                     print("Time: {0} s; Length 1: {1};Length 2: {2}".format(time, N, len(signal)))
             except ValueError:
                 print("Error")
                 pass
-    train_indexes = sorted(range(len(train_names)), key=lambda k: train_names[k])
-    test_indexes = sorted(range(len(test_names)), key=lambda k: test_names[k])
 
-    return np.array(train_dates)[train_indexes], \
-           np.array(train_names)[train_indexes], \
-           np.array(train_signals)[train_indexes],\
-           np.array(test_dates)[test_indexes], \
-           np.array(test_names)[test_indexes], \
-           np.array(test_signals)[test_indexes]
+    sorted_test_signals, sorted_train_signals = [], []
+    test_signals, test_names = np.array(test_signals), np.array(test_names)
+    sorted_train_indexes = sorted(range(len(train_names)), key=lambda k: train_names[k])
+
+    # sorted_train_signals = np.array(train_signals)[sorted_train_indexes]
+    for index in sorted_train_indexes: #security measure to make sure all names appear in both datasets
+        name = train_names[index]
+        sorted_test_signals.append(test_signals[np.where(test_names == name)[0]][0])
+        sorted_train_signals.append(train_signals[index])
+
+    return np.array(sorted_train_signals), np.array(sorted_test_signals), np.array(train_names)[sorted_train_indexes]
 
 
 def sort_index_by_key(key_array):
@@ -536,13 +656,17 @@ def get_multi_processed_signal(file_path, fs, dataset_dir, signal_dim, confidenc
                 signal = sig.decimate(signal, 2)
 
             if any(file_path[:-4] in s for s in first_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.01)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.01)
             elif any(file_path[:-4] in s for s in second_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.02)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.02)
             elif any(file_path[:-4] in s for s in third_list):
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=0.03)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=0.03)
             else:
-                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175, confidence=confidence)
+                signal = process_dnn_signal(signal, signal_dim, window_smooth=smooth_win, window_rmavg=175,
+                                            confidence=confidence)
             # plt.plot(np.arange(len(signal)) / 250, signal / np.max(signal))
             # plt.show()
                 # "223m", "106m", "222" - > experimentar o moving_std
@@ -654,9 +778,22 @@ def get_signals(signal_dim, dataset_dir, peak_into_data=False, decimate=None, va
 def extract_test_part(signals, ratio=0.33, overlap=0.33):
     return [signal[int(len(signal) * ratio + (1 / overlap) - 1):] for signal in signals]
 
+def extract_validation_part(signals, ratio_in=0.33, ratio_off=0.5, overlap=0.33):
+    return [signal[int(len(signal) * ratio_in + (1 / overlap) - 1):int(len(signal) * ratio_off - (1 / overlap) - 1)] for signal in signals]
+
 
 def extract_train_part(signals, ratio=0.33):
     return [signal[:int(len(signal) * ratio)] for signal in signals]
+
+def check_model_existence(signal_models):
+    for model in signal_models:
+        filename = DATASET_DIRECTORY + model.directory + "GRU_" + model.dataset_name +\
+                   "[{}.{}.-1.-5-5].npz".format(model.Hd, model.Sd)
+        if not os.path.isfile(filename):
+            return False
+
+    return True
+
 
 
 def get_biometric_signals(signal_dim, dataset_dir, index, peak_into_data=False, decimate=None, smooth_window=10, regression=False):
@@ -1191,7 +1328,7 @@ def make_training_sets(batches, percentage_of_train):
 
     return train_indexes, test_indexes, train, test
 
-def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Confusion matrix' , cmap=plt.cm.Reds,
+def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, name="" , cmap=plt.cm.Reds,
                           cmap_text=plt.cm.Reds_r, no_numbers=False, norm=False, N_Windows=None):
     # plt.tight_layout()
 
@@ -1215,38 +1352,34 @@ def plot_confusion_matrix(confusion_matrix, labels_pred, labels_true, title='Con
     spec = 100 * TN / (TN + FP)
     IR = np.sum(np.diag(confusion_matrix)) * 100 / np.sum(confusion_matrix)
 
+    # fig = plt.figure(name)
     fig, ax = plt.subplots()
+
     ax = prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true, cmap, cmap_text, no_numbers,
                                        norm, N_Windows)
 
     ax.annotate('Id Rate of {0:.1f}%'.format(IR),
-                xy=(0.5, 0), xytext=(0, 60),
+                xy=(0.5, 0), xytext=(0, 50),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
-                size=15, ha='center', va='bottom')
-
-    ax.annotate('Accurancy of {0:.1f}%'.format(ACC),
-                xy=(0.5, 0), xytext=(0, 35),
-                xycoords=('axes fraction', 'figure fraction'),
-                textcoords='offset points',
-                size=15, ha='center', va='bottom')
+                size=12, ha='center', va='bottom')
 
     ax.annotate('Specificity of {0:.1f}%'.format(spec),
+                xy=(0.5, 0), xytext=(0, 30),
+                xycoords=('axes fraction', 'figure fraction'),
+                textcoords='offset points',
+                size=12, ha='center', va='bottom')
+
+    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
                 xy=(0.5, 0), xytext=(0, 10),
                 xycoords=('axes fraction', 'figure fraction'),
                 textcoords='offset points',
-                size=15, ha='center', va='bottom')
-
-    ax.annotate('Sensitivity of {0:.1f}%'.format(sens),
-                xy=(0.5, 0), xytext=(0, -10),
-                xycoords=('axes fraction', 'figure fraction'),
-                textcoords='offset points',
-                size=15, ha='center', va='bottom')
+                size=12, ha='center', va='bottom')
 
     # ax = prepare_confusion_pie(ax, confusion_matrix)
     mng = plt.get_current_fig_manager()
     mng.resize(*mng.window.maxsize())
-    plt.title(title)
+    # plt.title(title)
     plt.show()
 
 def plot_confusion_matrix_with_pie(confusion_matrix, labels_pred, labels_true, rejection=None, title='Confusion matrix',
@@ -1291,23 +1424,26 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
         plt.imshow(confusion_matrix, interpolation='nearest', cmap=cmap)
 
     plt.colorbar()
-    # plt.tight_layout()
-    kwargs = dict(size=30, fontweight='bold')
+    # plt.tight_layout()<
+    kwargs = dict(size=20, fontweight='bold')
 
     plt.ylabel('Model', **kwargs)
     plt.xlabel('Signal', **kwargs)
+    ax.grid(color='#AA4444',alpha=0.2, linestyle='-', linewidth=0.5)
     ax.set_xticks(np.arange(-0.5, np.shape(confusion_matrix)[1], 0.5))
     ax.set_yticks(np.arange(-0.5, np.shape(confusion_matrix)[0], 0.5))
 
     for i in range(len(ax.get_xgridlines())):
         if i % 2 == 0:
-            ax.get_xgridlines()[i].set_linewidth(3)
+            ax.get_xgridlines()[i].set_linewidth(1)
+            ax.get_xgridlines()[i].set_color('#AA4444')
         else:
             ax.get_xgridlines()[i].set_linewidth(0)
 
     for i in range(len(ax.get_ygridlines())):
         if i % 2 == 0:
-            ax.get_ygridlines()[i].set_linewidth(3)
+            ax.get_ygridlines()[i].set_linewidth(1)
+            ax.get_ygridlines()[i].set_color('#AA4444')
         else:
             ax.get_ygridlines()[i].set_linewidth(0)
 
@@ -1317,8 +1453,8 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
             for j in range(len(confusion_matrix[0,:])):
                 value = int(confusion_matrix[i, j])
                 value_ = str(int(confusion_matrix[i, j]))
-                color_index = value/np.max(confusion_matrix)
-                if color_index>0.35 or color_index>0.65:
+                color_index = value / np.sum(confusion_matrix[0])
+                if color_index > 0.35 or color_index > 0.65:
                     color_index = 1.0
 
                 if norm:
@@ -1339,6 +1475,19 @@ def prepare_confusion_matrix_plot(ax, confusion_matrix, labels_pred, labels_true
     ax.xaxis.set_label_position('top')
     ax.set_xticklabels(labels_pred, rotation=90, **kwargs)
     return ax
+
+def get_file_tag(core_name, dataset=-5, epoch=-5):
+    """
+    Gives a standard name for the file, depending on the #dataset and #epoch
+    :param dataset: - int - dataset number
+                    (-1 if havent start training, -5 when the last batch training condition was met)
+    :param epoch: - int - the last epoch number the dataset was trained
+                    (-1 if havent start training, -5 when the training condition was met)
+    :return: file_tag composed as GRU_SIGNALNAME[SD.HD.BTTT.DATASET.EPOCH] -> example GRU_ecg[64.16.0.-5]
+    """
+
+    return 'GRU_{0}[{1}.{2}.{3}.{4}.{5}].npz'.\
+                format(core_name, 256, 256, -1, dataset, epoch)
 
 
 def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#E84150", "#FFB36D"], rejection = None):
@@ -1390,12 +1539,18 @@ def prepare_confusion_pie(ax, confusion_matrix, cmap = ["#3366CC", "#79BEDB", "#
 def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_mean=True):
     cmap = mpl.cm.get_cmap('rainbow')
     fig = plt.figure("fig", figsize=(900 / 96, 600 / 96), dpi=96)
-    for i, EER in zip(range(len(EERs)), EERs):
+    # savePdf = False
+    # indexes = [29, 51, 55, 58, 59, 64]
+    # indexes = [51, 58, 64]
+    # EERs = EERs[indexes]
+    indexes = np.arange(len(EERs))
+    for i, EER in zip(enumerate(indexes), EERs):
+        z, zi = i
         alph = 0.1
         if not plot_mean:
             alph = 0.6
-        plt.plot(time, EER, '.', color=cmap(i / len(EERs)), alpha=alph)
-        plt.plot(time, EER, color=cmap(i / len(EERs)), alpha=alph, label=labels[i])
+        plt.plot(time, EER, '.', color=cmap(z / len(EERs)), alpha=alph)
+        plt.plot(time, EER, color=cmap(z / len(EERs)), alpha=alph, label=labels[zi])
 
     font_s = 3
     if len(EERs) <= 40:
@@ -1412,10 +1567,10 @@ def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_
         mean_EERs = np.mean(EERs, axis=0).squeeze()
         std_EERs = np.std(EERs, axis=0).squeeze()
         index_min = np.argmin(mean_EERs)
-        plt.plot(time, mean_EERs, 'b.', alpha=0.8)
-        plt.plot(time, mean_EERs, 'b-', alpha=0.8, label="Mean")
+        plt.plot(time, mean_EERs, '.', alpha=0.8, color="#CD5C5C")
+        plt.plot(time, mean_EERs, '-', alpha=0.8, color="#CD5C5C", label="Mean")
         plt.plot(time[index_min], np.min(mean_EERs), 'ro', alpha=0.9)
-        (_, caps, _) = plt.errorbar(time, mean_EERs, yerr=std_EERs, color='b', alpha=0.8, elinewidth=1, capsize=5)
+        (_, caps, _) = plt.errorbar(time, mean_EERs, yerr=std_EERs, color='#CD5C5C', alpha=0.8, elinewidth=0.5, capsize=5)
         for x, cap in enumerate(caps):
             caps[x].set_markeredgewidth(1)
 
@@ -1425,20 +1580,29 @@ def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_
             plt.plot(time[index_min], np.min(EER), 'o', color=cmap(i / len(EERs)), alpha=0.6)
 
     indexi = 0.6 * np.max(time)
-    indexj = 0.5 * (np.max(EER) - np.min(EER))
+    indexj = np.min(mean_EERs) + np.max(std_EERs) + 0.1
 
-    step = (np.max(EER) - np.min(EER))
+    step = 0.05 * (np.max(mean_EERs) - np.min(mean_EERs))
     if plot_mean:
-        plt.annotate("EER MIN MEAN = {0:.3f}%".format(mean_EERs[index_min] * 100),
-                     xy=(indexi, indexj))
 
-        # plt.annotate("EER MIN STD = {0:.4f}".format(np.std(EER)),
+        plt.annotate("Min mean EER: {0:.3f}% \n Time: {1:.0f} s".format(mean_EERs[index_min] * 100, time[index_min]),
+                    xy=(time[index_min], np.min(mean_EERs)+0.01), xycoords='data',
+                    xytext=(indexi, indexj), textcoords='data',
+                     color="#AA8888",
+                    arrowprops=dict(arrowstyle="->",
+                                    connectionstyle="arc3",
+                                    color="#AA8888"),
+                    )
+        # plt.annotate("Min mean EER: {0:.3f}%".format(mean_EERs[index_min] * 100),
+        #              xy=(indexi, indexj))
+        #
+        # plt.annotate("Time: {0:.0f} s".format(time[index_min]),
         #              xy=(indexi, indexj - step))
         #
         # plt.annotate("TIME FOR MIN MEAN = {0:.4f}".format(time[index_min]),
         #              xy=(indexi, indexj - step * 2))
         #
-        # plt.annotate("TIME FOR MIN STD = {0:.4f}".format(mean_EERs[index_min]),
+        # plt.annotate("Time = {0:.4f}".format(mean_EERs[index_min]),
         #              xy=(indexi, indexj - step * 3))
     else:
         for i, EER in zip(range(len(EERs)), EERs):
@@ -1447,6 +1611,8 @@ def plot_errs(EERs, time, labels, filepath, file, title="", savePdf=False, plot_
                          xy=(time[index_min], EER[index_min] + 0.01), color=cmap(i / len(EERs)), ha='center')
 
     legend = plt.legend(bbox_to_anchor=(1.1, 1.01), frameon=True)
+    plt.ylabel("Equal Error Rate")
+    plt.xlabel("Time / s")
     legend.get_frame().set_facecolor('white')
     # plt.legend(bbox_to_anchor=(1.1, 1.01))
     plt.title(title)
@@ -1703,18 +1869,42 @@ def randomize_batch(x_windows, y_windows, batch_size=None):
     else:
         return x_windows[:, window_indexes[0:batch_size], :], y_windows[:, window_indexes[0:batch_size], :]
 
-
-def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=0.6, std_tol=100,
+def prepare_for_RR_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=10000, std_tol=100,
                       randomize=True):
-
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
 
-    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap, max_tol=mean_tol,
-                                                                     std_tol=std_tol)
+    windows = [np.asarray(window, np.int16) for window in windows]
+    windows = [quantitize_signal(sig.decimate(windows[0], 4), signal2model.signal_dim)]
 
-    x__matrix = np.array(x__matrix)
-    y__matrix = np.array(y__matrix)
+    rrs = detect_panthomkins_peaks(windows[0], 50)
+    # rrs = [np.where(np.bitwise_and(window[1:-1] > np.max(windows[0][1:-1])*0.8, np.diff(window[0:-1]) * np.diff(windows[0][1:])
+    #                       <= 0))[0] for window in windows]
+
+    RRs = np.zeros_like(windows[0])
+
+    # RRs[rrs[0][1:]+1] = np.diff(rrs[0])
+    initial = 0
+    for rr_index, value in zip(rrs, np.diff(rrs)):
+        RRs[initial:rr_index+1] = value if value < signal2model.signal_dim-1 else signal2model.signal_dim-1
+        initial = rr_index+1
+
+    # RRs[RRs>=signal2model.signal_dim-1] = signal2model.signal_dim-1
+    # plt.plot(windows[0][1:])
+    # plt.plot(RRs)
+    # plt.show()
+    windows[0] = windows[0]
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+
+    indexes, xRR, yRR, reject, total = get_clean_indexes([RRs], signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+    x__matrix = np.array(x__matrix[1:], dtype=np.int16)
+    y__matrix = np.array(y__matrix[1:], dtype=np.int16)
+    xRR = np.array(xRR[1:], dtype=np.int16)
+    yRR = np.array(yRR[1:], dtype=np.int16)
+
+    # yRRs =
     print(len(x__matrix))
 
     end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
@@ -1729,17 +1919,243 @@ def prepare_test_data(windows, signal2model, overlap=0.33, batch_percentage=0, m
     else:
         indexes = end_train_index + np.arange(int(batch_size))
 
+    return [x__matrix[indexes], y__matrix[indexes]], [xRR[indexes], yRR[indexes]]
 
+def prepare_for_other_RR_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=10000, std_tol=100,
+                      randomize=True):
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    windows = [np.asarray(window, np.int16) for window in windows]
+    windows = [quantitize_signal(windows[0], signal2model.signal_dim)]
+    rrs = [np.where(np.bitwise_and(window[1:-1] > np.max(windows[0][1:-1])*0.8, np.diff(window[0:-1]) * np.diff(windows[0][1:])
+                          <= 0))[0] for window in windows]
+
+    RRs = np.zeros_like(windows[0])
+    RRs[rrs[0][1:]+1] = np.diff(rrs[0])
+    RRs[RRs >= signal2model.signal_dim-1] = signal2model.signal_dim-1
+    # plt.plot(windows[0][1:])
+    # plt.plot(RRs)
+    # plt.show()
+    windows[0] = windows[0][1:]
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+
+    indexes, xRR, yRR, reject, total = get_clean_indexes([RRs], signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+    x__matrix = np.array(x__matrix[1:], dtype=np.int16)
+    y__matrix = np.array(y__matrix[1:], dtype=np.int16)
+    xRR = np.array(xRR[1:], dtype=np.int16)
+    yRR = np.array(yRR[1:], dtype=np.int16)
+
+    # yRRs =
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    if randomize:
+        indexes = end_train_index + np.random.permutation(int(batch_size))
+    else:
+        indexes = end_train_index + np.arange(int(batch_size))
+
+    return [x__matrix[indexes], y__matrix[indexes]], [xRR[indexes], yRR[indexes]]
+
+def prepare_test_data(windows, signal2model, overlap=0.33, train_signals=None, batch_percentage=0, mean_tol=10000, std_tol=100,
+                      randomize=True):
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, train_signals=None, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol)
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    if randomize:
+        indexes = end_train_index + np.random.permutation(int(batch_size))
+    else:
+        indexes = end_train_index + np.arange(int(batch_size))
+
+    # plt.ion()
+    # for x in x__matrix[indexes]:
+    #     plt.plot(x)
+    #     plt.pause(0.1)
+    #     plt.clf()
+    # plt.close()
+    return x__matrix[indexes], y__matrix[indexes]
+
+def get_feedback_index(window):
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
+    l, = plt.plot(window, lw=2)
+
+    class BooleanSwitcher(object):
+        chosen = None
+
+        def yes(self, event):
+            self.chosen = True
+            plt.close()
+
+        def no(self, event):
+            self.chosen = False
+            plt.close()
+
+    callback = BooleanSwitcher()
+    axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+    axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+    by = Button(axnext, 'Yes')
+    by.on_clicked(callback.yes)
+    bn = Button(axprev, 'No')
+    bn.on_clicked(callback.no)
+    plt.show()
+
+    return callback.chosen
+
+
+
+
+from matplotlib.widgets import CheckButtons
+
+
+def get_feedback_indexes(windows, rows=5):
+    fig, ax = plt.subplots()
+    fig.set_size_inches(18.5, 10.5)
+    # plt.subplots_adjust(left=0.2)
+    l = []
+    for row, window in zip(range(rows), windows):
+        plt.subplot(rows, 1, row+1)
+        plt.ylim([0, 256])
+        l.append(plt.plot(window, lw=2))
+    rax = plt.axes([0.9, 0.09, 0.2, 0.85])
+    check = CheckButtons(rax, [str(i) for i in range(rows)], [True for i in range(rows)] )
+    check.rectangles
+    class BooleanSwitchers(object):
+        chosen = None
+        checked = []
+
+        def __init__(self, rows):
+            self.checked = [True for i in range(rows)]
+
+        def ok(self, event):
+            plt.close()
+
+        def func(self, label):
+            self.checked[int(label)-1] = not int(label)
+
+    callback = BooleanSwitchers(rows)
+    #left, bottom, width, high
+    axprev = plt.axes([0.9, 0.01, 0.05, 0.05])
+    bn = Button(axprev, 'Ok')
+    check.on_clicked(callback.func)
+    bn.on_clicked(callback.ok)
+    plt.show()
+
+    return callback.checked
+
+
+def prepare_several_special_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=100, std_tol=100,
+                      show=True):
+
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol, show=show)
+
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    indexes = []
+    counter = 0
+    rows = 10
+    random_indexes = np.random.permutation(len(x__matrix))
+    while len(indexes) < batch_size and counter < len(random_indexes)-rows:
+        windows = x__matrix[random_indexes[counter:counter+rows]]
+        chosen_indexes = get_feedback_indexes(windows, rows)
+        # chosen_indexes = np.array([True for i in range(len(windows))])
+        if any(chosen_indexes):
+            counters = np.arange(counter, counter+rows)[np.array(chosen_indexes)]
+            print(chosen_indexes)
+            indexes += random_indexes[counters].tolist()
+
+        print("# of Windows: {0}".format(len(indexes)))
+        counter += rows
+
+    batch_size = batch_size \
+        if (batch_size < len(indexes)) \
+        else len(indexes) - (len(indexes) % signal2model.mini_batch_size)
+
+    indexes = np.array(indexes)[:batch_size]
+    return x__matrix[indexes], y__matrix[indexes]
+
+def prepare_special_data(windows, signal2model, overlap=0.33, batch_percentage=0, mean_tol=100, std_tol=100,
+                      show=True):
+
+    window_size, batch_size, mini_batch_size = \
+        signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
+
+    indexes, x__matrix, y__matrix, reject, total = get_clean_indexes(windows, signal2model, overlap=overlap,
+                                                                     mean_tol=mean_tol, std_tol=std_tol, show=show)
+
+
+    x__matrix = np.array(x__matrix, dtype=np.int16)
+    y__matrix = np.array(y__matrix, dtype=np.int16)
+    print(len(x__matrix))
+
+    end_train_index = int(np.shape(x__matrix)[0] * batch_percentage)
+    max_batch_size = int(np.shape(x__matrix)[0] - end_train_index) - \
+                     int(np.shape(x__matrix)[0] - end_train_index) % mini_batch_size
+    batch_size = batch_size \
+        if ((batch_size is not None) and (batch_size < max_batch_size)) \
+        else max_batch_size
+
+    indexes = []
+    counter = 0
+    random_indexes = np.random.permutation(len(x__matrix))
+    while len(indexes) < batch_size or counter == len(random_indexes)-1:
+        window = x__matrix[random_indexes[counter]]
+        is_chosen_index = get_feedback_index(window)
+        if is_chosen_index:
+            indexes.append(random_indexes[counter])
+
+        print("# of Windows: {0}".format(len(indexes)))
+        counter += 1
+
+    indexes = np.array(indexes)
     return x__matrix[indexes], y__matrix[indexes]
 
 
-def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10000000, already_cut=False):
+def get_clean_indexes(windows, signal2model, overlap=0.33, train_signals=None, max_tol=0, mean_tol=100000, std_tol=10000000,
+                      already_cut=False, show=False):
     x__matrix, y__matrix = [], []
     window_size, batch_size, mini_batch_size = \
         signal2model.window_size, signal2model.batch_size, signal2model.mini_batch_size
     reject = 0
     total = 0
     windows_standard_deviation = []
+    windows_abs_mean = []
     ws = []
     windows_amplitude = []
     small_windows = []
@@ -1749,21 +2165,49 @@ def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10
             small_windows.append(window)
             windows_standard_deviation.append(np.std(small_windows[-1]))
             windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+            windows_abs_mean.append(np.sum(abs(small_windows[-1]) - np.min(small_windows[-1])))
             indexes.append(s_w)
         elif len(window) > window_size + 1:
             for s_w in range(0, len(window) - window_size - 1, int(window_size * overlap)):
-                small_windows.append(np.round(window[s_w:s_w + window_size]))
+                small_windows.append(window[s_w:s_w + window_size])
                 windows_standard_deviation.append(np.std(small_windows[-1]))
                 windows_amplitude.append(np.max(small_windows[-1]) - np.min(small_windows[-1]))
+                windows_abs_mean.append(np.sum(abs(small_windows[-1]) - np.min(small_windows[-1])))
                 indexes.append(s_w)
 
-    stw_median = np.median(windows_standard_deviation)
-    limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    train_median = []
+    train_std = []
+    if train_signals is not None:
+        for s_w in range(0, len(train_signals) - window_size - 1, int(window_size * overlap)):
+            train_std.append(np.std(train_signals[s_w:s_w + window_size]))
+            train_median.append(np.sum(abs(train_signals[s_w:s_w + window_size])))
+            stw_median = np.median(train_std)
+            abs_mean_median = np.median(train_median)
+    else:
+        stw_median = np.median(np.round(windows_standard_deviation))
+        abs_mean_median = np.median(np.round(windows_abs_mean))
+
+    std_limits = [stw_median - std_tol * stw_median, stw_median + std_tol * stw_median]
+    abs_mean_limits = [abs_mean_median - mean_tol * abs_mean_median, abs_mean_median + mean_tol * abs_mean_median]
+    if show:
+        plt.plot(np.arange(len(windows_abs_mean)), windows_abs_mean, color="#FFA07A")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_median, color="#CD5C5C")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_limits[0], color="#800000")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*abs_mean_limits[1], color="#800000")
+        # plt.show()
+        plt.figure()
+        plt.plot(windows_standard_deviation, color="#66CDAA")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*stw_median, color="#00CED1")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*std_limits[0], color="#008080")
+        plt.plot(np.arange(len(windows_abs_mean)), np.ones(len(windows_abs_mean))*std_limits[1], color="#008080")
+        plt.show()
     rejected_windows = []
     aproved_indexes = []
     index = 0
-    for amp, stw, window, i in zip(windows_amplitude, windows_standard_deviation, small_windows, indexes):
-        if (amp > max_tol * signal2model.signal_dim) and (limits[0] <= stw <= limits[1]):
+    for abm, amp, stw, window, i in zip(windows_abs_mean, windows_amplitude, windows_standard_deviation, small_windows, indexes):
+        if (amp > max_tol * signal2model.signal_dim) and \
+                (std_limits[0] <= stw <= std_limits[1]) and \
+                (abs_mean_limits[0] <= abm <= abs_mean_limits[1]):
             aproved_indexes.append(index)
             x__matrix.append(window[:-1])
             y__matrix.append(window[1:])
@@ -1780,6 +2224,16 @@ def get_clean_indexes(windows, signal2model, overlap=0.33, max_tol=0, std_tol=10
 def mask_without_indexes(array_list, indexes):
     mask = np.ones(len(array_list), dtype=bool)
     mask[indexes] = False
+    return mask
+
+def get_indexes_from_info(models_info, indexes):
+    mask = []
+    info_indexes = [int(info.dataset_name.split("_")[-1]) for info in models_info]
+    for i in indexes:
+        try:
+            mask += info_indexes.index(i)
+        except:
+            pass
     return mask
 
 

@@ -57,7 +57,7 @@ def get_mit_database_info():
 
         return all_models_info
 
-
+general_ecg = ModelInfo(256, 256, "generic_ecg", "ECG_CLUSTER[128.1024]", 10072, 750, 1024, "ECG GENERAL")
 
 
 signal_models = [ModelInfo(64, 256, "eeg_all", "EEG_Attention[1000.256]",
